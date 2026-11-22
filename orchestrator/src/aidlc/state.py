@@ -22,6 +22,8 @@ class StageRecord:
     models: list[str] = field(default_factory=list)
     gate: str | None = None
     notes: list[str] = field(default_factory=list)
+    started: str | None = None
+    ended: str | None = None
 
 
 @dataclass
@@ -41,7 +43,8 @@ class RunState:
     loops: int = 0
     feedback: list[str] = field(default_factory=list)
     history: list[dict] = field(default_factory=list)
-    owned_paths: dict[str, str] = field(default_factory=dict)  # path -> content hash left by this run's agents
+    owned_paths: dict[str, str] = field(default_factory=dict)
+    rating: int | None = None  # developer's 1-5 rating of the run  # path -> content hash left by this run's agents
 
     def stage(self, name: str) -> StageRecord:
         return self.stages.setdefault(name, StageRecord())

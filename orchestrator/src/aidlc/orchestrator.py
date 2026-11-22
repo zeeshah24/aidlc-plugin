@@ -9,14 +9,14 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from aidlc import gitutil, harness, intake, models, permissions, report
+from aidlc import gitutil, harness, intake, models, permissions, report, telemetry
 from aidlc.adapters import AgentAdapter, default_adapters
 from aidlc.config import Config
 from aidlc.harness import AuditLog, RunPaths
 from aidlc.runners import RUNNERS, Outcome, StageContext, StageError
 from aidlc.stages import LOOP_BACK, Stage
 from aidlc.state import RunState
-from aidlc.util import sha256_file, slugify, stamp
+from aidlc.util import now_iso, sha256_file, slugify, stamp
 
 # Artifacts that are cheap and deterministic to regenerate (graceful degradation).
 DERIVABLE = {"stack_profile"}
@@ -195,6 +195,7 @@ class Pipeline:
                 state.save(paths.run_dir)
                 audit.log("stage.start", stage=name)
                 t0 = time.monotonic()
+                rec.started = rec.started or now_iso()
                 try:
                     outcome = RUNNERS[name](ctx)
                 except StageError as exc:
@@ -203,6 +204,7 @@ class Pipeline:
                     if writes:  # also on Ctrl+C, so a resume recognises the agent's own edits
                         state.owned_paths = self.dirty_hashes()
                 rec.duration_s = round(rec.duration_s + time.monotonic() - t0, 3)
+                rec.ended = now_iso()
                 rec.attempts = max(rec.attempts, 1)
                 rec.gate = outcome.gate or rec.gate
                 state.event(name, outcome.status, outcome.detail)
@@ -265,9 +267,37 @@ class Pipeline:
             state.status = "completed"
             return state.status
         finally:
+            finished = state.status in ("completed", "failed")
+            if finished:
+                self.ask_rating(state)
             state.save(paths.run_dir)
             report.write(self.cfg, state, paths)
+            if finished:
+                self.export_telemetry(state, paths, audit)
             state.save(paths.run_dir)
+
+    def ask_rating(self, state: RunState) -> None:
+        tcfg = telemetry.settings(self.cfg)
+        if state.rating is not None or not self._interactive() or not tcfg.get("enabled"):
+            return
+        if not tcfg.get("ask_rating", True):
+            return
+        try:
+            answer = self.ask("How useful was this run? 1-5 (Enter to skip) ").strip()
+        except (EOFError, KeyboardInterrupt):  # skipping the rating must not skip finalisation
+            return
+        if answer in {"1", "2", "3", "4", "5"}:
+            state.rating = int(answer)
+
+    def export_telemetry(self, state: RunState, paths: RunPaths, audit: AuditLog) -> None:
+        try:
+            sinks = telemetry.export_run(self.cfg, state, paths)
+        except Exception as exc:  # telemetry must never fail a run
+            audit.log("telemetry.failed", error=str(exc)[:300])
+            self.out(f"telemetry export failed: {exc}")
+            return
+        if sinks:
+            audit.log("telemetry.exported", sinks=sinks)
 
 
 def record_approval(state: RunState, paths: RunPaths, stage: str, explicit: bool) -> None:

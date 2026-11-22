@@ -56,6 +56,8 @@ def build(cfg: Config, state: RunState, paths: RunPaths) -> str:
     notes = [(n, r.notes) for n, r in state.stages.items() if r.notes]
     if notes:
         lines += ["## Notes", ""] + [f"- **{n}:** {msg}" for n, ns in notes for msg in ns] + [""]
+    if state.rating is not None:
+        lines += [f"Developer rating: {state.rating}/5", ""]
     requests = permissions.load(paths.run_dir)
     if requests:
         lines += ["## Guardrail approvals", "", "| Id | Stage | Decision | Action | Reason |", "|---|---|---|---|---|"]

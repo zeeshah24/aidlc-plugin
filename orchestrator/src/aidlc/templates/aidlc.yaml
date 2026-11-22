@@ -17,6 +17,14 @@ pipeline:
   agent_timeout_s: 1800
   test_timeout_s: 900
   max_context_chars: 60000
+telemetry:                # opt-in; nothing leaves this machine unless enabled (see docs/TELEMETRY.md)
+  enabled: false
+  endpoint: ""            # OTLP/HTTP base URL of your own collector (or OTEL_EXPORTER_OTLP_ENDPOINT)
+  file: ""                # also append run/outcome records as JSONL, e.g. for a log shipper
+  team: ""                # reporting dimension; report by team, not by developer
+  raw_identifiers: false  # false: repo/developer are salted hashes (salt: AIDLC_TELEMETRY_SALT)
+  include_developer: false
+  ask_rating: true        # interactive runs ask for a 1-5 rating at the end
 harness:
   isolated: false         # true only when agents run in a container/VM (integrations/container sets AIDLC_ISOLATED=1)
 stack: {}                 # override detection, e.g. {test_command: "make test"}

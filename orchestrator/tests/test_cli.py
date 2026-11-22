@@ -139,3 +139,16 @@ def test_guard_hook_noop_without_active_run(tmp_path: Path):
         env={"PATH": "/usr/bin:/bin", "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")},
     )
     assert proc.returncode == 0
+
+
+def test_rate_updates_report(repo, requirement, monkeypatch):
+    from test_pipeline import Script, pipeline
+
+    from aidlc import cli, intake, stages
+
+    pipe, _ = pipeline(repo, Script())
+    state, paths = pipe.start(intake.from_file(requirement))
+    pipe.execute(state, paths, stages.select())
+    monkeypatch.chdir(repo / "tests")
+    assert cli.main(["rate", "5", "--run", state.run_id]) == 0
+    assert "Developer rating: 5/5" in paths.report_file.read_text()
