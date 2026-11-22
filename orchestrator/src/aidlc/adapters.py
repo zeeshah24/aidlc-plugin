@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
+from aidlc.util import run_killable
+
 READ_ONLY_TOOLS = ["Read", "Grep", "Glob"]
 WRITE_TOOLS = ["Read", "Grep", "Glob", "Write", "Edit", "MultiEdit", "Bash"]
 
@@ -82,15 +84,7 @@ class ClaudeCodeAdapter:
 
     def run(self, req: AgentRequest) -> AgentResult:
         start = time.monotonic()
-        proc = subprocess.run(
-            self.command(req),
-            input=req.prompt,
-            cwd=req.workdir,
-            env=req.env,
-            capture_output=True,
-            text=True,
-            timeout=req.timeout_s,
-        )
+        proc = run_killable(self.command(req), input=req.prompt, cwd=req.workdir, env=req.env, timeout=req.timeout_s)
         elapsed = time.monotonic() - start
         try:
             data = json.loads(proc.stdout)
@@ -139,15 +133,7 @@ class CodexAdapter:
 
     def run(self, req: AgentRequest) -> AgentResult:
         start = time.monotonic()
-        proc = subprocess.run(
-            self.command(req),
-            input=req.prompt,
-            cwd=req.workdir,
-            env=req.env,
-            capture_output=True,
-            text=True,
-            timeout=req.timeout_s,
-        )
+        proc = run_killable(self.command(req), input=req.prompt, cwd=req.workdir, env=req.env, timeout=req.timeout_s)
         text, tin, tout = "", 0, 0
         for line in proc.stdout.splitlines():
             try:

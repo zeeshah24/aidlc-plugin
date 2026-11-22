@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import fnmatch
 import hashlib
+import os
 import re
+import signal
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -35,6 +38,31 @@ def load_yaml(path: Path) -> dict:
 def glob_match(path: str, globs: list[str]) -> bool:
     """fnmatch where a leading `**/` also matches files at the repository root."""
     return any(fnmatch.fnmatch(path, g) or (g.startswith("**/") and fnmatch.fnmatch(path, g[3:])) for g in globs)
+
+
+def run_killable(cmd, *, timeout: float | None, input: str | None = None, **kwargs) -> subprocess.CompletedProcess:
+    """``subprocess.run`` that kills the whole process group on timeout or interrupt, so tools an agent or a
+    test command spawned cannot outlive it and keep editing the worktree."""
+    posix = os.name == "posix"
+    proc = subprocess.Popen(
+        cmd,
+        stdin=subprocess.PIPE if input is not None else subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=posix,
+        **kwargs,
+    )
+    try:
+        out, err = proc.communicate(input, timeout=timeout)
+    except BaseException:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL) if posix else proc.kill()
+        except ProcessLookupError:
+            pass
+        proc.communicate()
+        raise
+    return subprocess.CompletedProcess(cmd, proc.returncode, out, err)
 
 
 def slugify(text: str) -> str:

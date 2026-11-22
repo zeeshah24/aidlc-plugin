@@ -140,15 +140,11 @@ def run_tests(ctx: StageContext) -> tuple[int, str]:
         raise StageError("no test command detected; set stack.test_command in aidlc.yaml")
     ctx.audit.log("command.run", command=cmd)
     env = harness.scoped_env(ctx.cfg, ctx.paths, "tests")
-    proc = subprocess.run(
-        cmd,
-        shell=True,
-        cwd=ctx.workdir,
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=int(ctx.cfg.get("pipeline.test_timeout_s", 900)),
-    )
+    timeout = int(ctx.cfg.get("pipeline.test_timeout_s", 900))
+    try:
+        proc = run_killable(cmd, shell=True, cwd=ctx.workdir, env=env, timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        raise StageError(f"test command timed out after {timeout}s (pipeline.test_timeout_s)") from exc
     return proc.returncode, proc.stdout + proc.stderr
 
 
