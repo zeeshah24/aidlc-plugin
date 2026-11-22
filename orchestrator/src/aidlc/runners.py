@@ -295,13 +295,10 @@ def run_test(ctx: StageContext) -> Outcome:
     profile = ctx.profile()
     globs = profile.get("test_globs", [])
     ids = traceability.requirement_ids(ctx.read("spec"), ctx.id_pattern())
-    base_code, base_out = run_tests(ctx)
-    if base_code not in (0, 5):  # 5 = pytest "no tests collected"
-        return Outcome(
-            "failed",
-            f"existing test suite already fails (exit {base_code}); fix it so the red gate is meaningful:\n"
-            + tail(base_out, 1500),
-        )
+    baseline_red = False
+    if not ctx.paths.artifact("test_lock").exists():
+        base_code, _ = run_tests(ctx)
+        baseline_red = base_code not in (0, 5)  # 5 = pytest "no tests collected"
 
     def attempt(feedback: list[str]) -> Outcome:
         prompt = prompts.build(
@@ -362,6 +359,9 @@ def run_test(ctx: StageContext) -> Outcome:
         detail = f"{len(lock['files'])} test file(s) locked; red exit {code}"
         if missing:
             ctx.state.stage("test").notes.append(f"IDs without tests: {', '.join(missing)}")
+        if baseline_red:
+            note = "suite already failed before new tests (deps not installed, empty suite, or broken tests)"
+            return Outcome("passed", f"{detail}; red gate unverified: {note}", gate="red-unverified")
         return Outcome("passed", detail, gate="red")
 
     return with_retries(ctx, "test", attempt)
