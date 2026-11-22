@@ -13,6 +13,7 @@ pipeline:
   max_retries: 2          # extra attempts inside a stage
   max_cost_usd: 0         # stop the run once estimated spend exceeds this (0 = no budget)
   max_tokens: 0           # stop the run once total tokens exceed this (0 = no budget)
+  require_test_for: ["AC-"] # verify fails while an ID with these prefixes has no test naming it ([] = off)
   max_loops: 3            # verify/review/scan/PR -> implement loops before fail-fast
   worktree: true          # isolate each run in .aidlc/worktrees/<run-id>
   branch_prefix: aidlc/

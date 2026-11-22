@@ -45,6 +45,7 @@ class Finding:
 class ScanResult:
     findings: list[Finding] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
+    ran: list[str] = field(default_factory=list)
 
 
 def tracked_files(root: Path) -> list[str]:
@@ -485,10 +486,13 @@ def run_scanners(root: Path, profile: dict, gate_cfg: dict) -> ScanResult:
     if "python" in langs:
         if "circular_dependency" in enabled:
             result.findings += circular_imports(root, src)
+            result.ran.append("builtin:circular_imports")
         if "complexity" in enabled:
             result.findings += complexity(root, src, int(gate_cfg.get("complexity_threshold", 10)))
+            result.ran.append("builtin:complexity")
     if "duplication" in enabled:
         result.findings += duplication(root, files, int(gate_cfg.get("duplication_min_lines", 8)), test_globs)
+        result.ran.append("builtin:duplication")
 
     external = [
         ("pip-audit", "vulnerability", "python", lambda: pip_audit(root)),
@@ -509,13 +513,20 @@ def run_scanners(root: Path, profile: dict, gate_cfg: dict) -> ScanResult:
             continue
         try:
             result.findings += fn()
+            result.ran.append(binary)
         except (json.JSONDecodeError, subprocess.SubprocessError, KeyError) as exc:
             result.skipped.append(f"{binary} ({category}): failed: {exc}")
     for tool in gate_cfg.get("tools", []):
         try:
             result.findings += sarif(tool, root)
+            result.ran.append(f"sarif:{tool.get('name')}")
         except (json.JSONDecodeError, subprocess.SubprocessError, OSError) as exc:
             result.skipped.append(f"{tool.get('name')}: failed: {exc}")
+    uncovered = sorted(langs - {"python", "javascript", "typescript"})
+    if uncovered and not gate_cfg.get("tools"):
+        result.skipped.append(
+            f"no built-in analyzers for {', '.join(uncovered)}; add SARIF tools under scan.tools for real coverage"
+        )
     return result
 
 
@@ -556,6 +567,7 @@ def gate(
         "new": [asdict(f) for f in new],
         "blocking": [asdict(f) for f in blocking],
         "skipped": head.skipped,
+        "ran": head.ran,
         "block_severity": gate_cfg.get("block_severity", "medium"),
     }
 

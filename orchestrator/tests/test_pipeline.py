@@ -288,3 +288,11 @@ def test_run_cannot_execute_twice_concurrently(repo: Path, requirement: Path):
     state, paths = pipe.start(intake.from_file(requirement))
     with run_lock(paths.run_dir), pytest.raises(SystemExit, match="already executing"):
         pipe.execute(state, paths, stages.select())
+
+
+def test_untested_requirement_id_fails_verify_deterministically(repo: Path, requirement: Path):
+    untested = "from calc import add\n\n\ndef test_add():  # REQ-1\n    assert add(2, 3) == 5\n"
+    pipe, _ = pipeline(repo, Script(test=[lambda r: write(r, "tests/test_calc.py", untested)]))
+    state, paths = pipe.start(intake.from_file(requirement))
+    assert pipe.execute(state, paths, stages.select()) != "completed"
+    assert "no test referencing it" in json.dumps(state.history + state.feedback)

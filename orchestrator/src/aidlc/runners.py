@@ -501,8 +501,13 @@ def run_verify(ctx: StageContext) -> Outcome:
         ctx.paths.artifact("verification").write_text(text + "\n## Traceability matrix (generated)\n\n" + table)
         if matrix["untested"]:
             ctx.state.stage("verify").notes.append(f"untested IDs: {', '.join(matrix['untested'])}")
-        if result == "GAPS":
-            gaps = bullets(section(text, "Gaps")) or ["Verification reported gaps; see verification.md"]
+        gaps = bullets(section(text, "Gaps")) if result == "GAPS" else []
+        if result == "GAPS" and not gaps:
+            gaps = ["Verification reported gaps; see verification.md"]
+        prefixes = tuple(ctx.cfg.get("pipeline.require_test_for", ["AC-"]) or [])
+        untested = [rid for rid in matrix["untested"] if prefixes and rid.startswith(prefixes)]
+        gaps += [f"{rid} has no test referencing it (traceability gate)" for rid in untested]
+        if gaps:
             return Outcome("route_back", f"{len(gaps)} gap(s)", gaps, gate="gaps")
         return Outcome("passed", f"{len(ids)} IDs traced; {len(matrix['untested'])} untested", gate="pass")
 

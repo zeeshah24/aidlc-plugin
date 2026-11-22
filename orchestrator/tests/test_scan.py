@@ -74,3 +74,16 @@ def test_baseline_delta_gate(repo: Path, tmp_path: Path):
     strict = {**CFG, "complexity_threshold": 1}
     result = scan.gate(repo, repo, base, PROFILE, strict, "", tmp_path / "cache")
     assert {f["file"] for f in result["blocking"] if f["category"] == "complexity"} == {"new.py"}
+
+
+def test_scan_reports_analyzers_that_ran_and_uncovered_languages(tmp_path: Path):
+    import subprocess
+
+    from aidlc.scan import run_scanners
+
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    (tmp_path / "Main.java").write_text("class Main {}\n")
+    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True)
+    res = run_scanners(tmp_path, {"languages": ["java"], "test_globs": []}, {"analyzers": ["duplication"]})
+    assert res.ran == ["builtin:duplication"]
+    assert any("java" in s and "SARIF" in s for s in res.skipped)
