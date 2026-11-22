@@ -1,0 +1,155 @@
+"""Tool-level guardrail enforcement.
+
+Used in two ways:
+* ``aidlc guard pre-tool`` / ``post-tool`` as Claude Code hooks (JSON on stdin, exit 2 = block);
+* directly by the orchestrator for post-hoc checks on agents that do not support hooks.
+"""
+
+from __future__ import annotations
+
+import fnmatch
+import json
+import os
+import re
+import shlex
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+
+from aidlc.config import load_config
+from aidlc.harness import AuditLog
+
+WRITE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
+_SEGMENT_SPLIT = re.compile(r"\s*(?:&&|\|\||;|\||\n)\s*")
+
+
+@dataclass
+class Decision:
+    allowed: bool
+    reason: str = ""
+
+
+def _match(value: str, patterns: list[str]) -> str | None:
+    return next((p for p in patterns if fnmatch.fnmatchcase(value, p)), None)
+
+
+def approved_packages(run_dir: Path | None) -> set[str]:
+    if not run_dir:
+        return set()
+    path = run_dir / "dependencies.json"
+    if not path.exists():
+        return set()
+    deps = json.loads(path.read_text()).get("dependencies", [])
+    return {d["name"].lower() for d in deps if d.get("status") == "approved"}
+
+
+def locked_paths(run_dir: Path | None) -> set[str]:
+    if not run_dir:
+        return set()
+    path = run_dir / "test-lock.json"
+    return set(json.loads(path.read_text()).get("files", {})) if path.exists() else set()
+
+
+def _install_targets(segment: str) -> list[str]:
+    try:
+        words = shlex.split(segment)
+    except ValueError:
+        return []
+    idx = next((i for i, w in enumerate(words) if w in {"install", "add", "get", "i"}), None)
+    if idx is None:
+        return []
+    names = []
+    for word in words[idx + 1 :]:
+        if word.startswith("-"):
+            continue
+        name = "@" + word[1:].split("@", 1)[0] if word.startswith("@") else re.split("[=<>~!@\\[]", word)[0]
+        names.append(name.lower())
+    return [n for n in names if n]
+
+
+def check_command(command: str, guardrails: dict, run_dir: Path | None = None) -> Decision:
+    cmd_cfg = guardrails.get("commands", {})
+    deny = _match(command.strip(), cmd_cfg.get("deny", []))
+    if deny:
+        return Decision(False, f"command matches deny rule '{deny}'")
+    approved = approved_packages(run_dir)
+    installs = guardrails.get("dependencies", {}).get("install_commands", [])
+    for segment in filter(None, _SEGMENT_SPLIT.split(command.strip())):
+        if _match(segment, cmd_cfg.get("deny", [])):
+            return Decision(False, f"'{segment}' matches a deny rule")
+        pkgs = _install_targets(segment) if _match(segment, installs) else []
+        if pkgs:
+            missing = [p for p in pkgs if p not in approved]
+            if missing:
+                return Decision(False, f"dependency install not approved in the plan's dependency gate: {missing}")
+            continue
+        if not _match(segment, cmd_cfg.get("allow", [])):
+            return Decision(False, f"'{segment}' is not in the command allowlist")
+    return Decision(True)
+
+
+def check_write(file_path: str, guardrails: dict, jail: Path, run_dir: Path | None = None) -> Decision:
+    target = Path(file_path)
+    if not target.is_absolute():
+        target = jail / target
+    target = Path(os.path.normpath(target))
+    jail = Path(os.path.normpath(jail))
+    if target != jail and jail not in target.parents:
+        return Decision(False, f"{file_path} is outside the workspace jail {jail}")
+    rel = target.relative_to(jail).as_posix()
+    rule = _match(rel, guardrails.get("paths", {}).get("protected", []))
+    if rule:
+        return Decision(False, f"{rel} is protected by '{rule}'")
+    if rel in locked_paths(run_dir):
+        return Decision(False, f"{rel} is a locked red test; make the implementation satisfy it instead")
+    return Decision(True)
+
+
+def evaluate(tool_name: str, tool_input: dict, guardrails: dict, jail: Path, run_dir: Path | None) -> Decision:
+    if tool_name == "Bash":
+        return check_command(tool_input.get("command", ""), guardrails, run_dir)
+    if tool_name in WRITE_TOOLS:
+        path = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
+        return check_write(path, guardrails, jail, run_dir)
+    return Decision(True)
+
+
+def _active_context() -> tuple[Path, Path | None] | None:
+    run_dir = os.environ.get("AIDLC_RUN_DIR")
+    jail = os.environ.get("AIDLC_JAIL")
+    if run_dir and jail:
+        return Path(jail), Path(run_dir)
+    return None
+
+
+def hook_main(event: str) -> int:
+    payload = json.loads(sys.stdin.read() or "{}")
+    ctx = _active_context()
+    if ctx is None:
+        return 0
+    jail, run_dir = ctx
+    tool, tool_input = payload.get("tool_name", ""), payload.get("tool_input", {})
+    audit = AuditLog(run_dir / "audit.jsonl", actor=f"agent:{os.environ.get('AIDLC_STAGE', 'interactive')}")
+    if event == "post-tool":
+        audit.log("tool.used", tool=tool, input=_summarize(tool_input))
+        return 0
+    cfg = load_config(Path(os.environ.get("AIDLC_PROJECT_ROOT") or jail))
+    decision = evaluate(tool, tool_input, cfg.guardrails, jail, run_dir)
+    audit.log(
+        "tool.allowed" if decision.allowed else "tool.blocked",
+        tool=tool,
+        input=_summarize(tool_input),
+        reason=decision.reason,
+    )
+    if not decision.allowed:
+        print(f"AI-DLC guardrail blocked {tool}: {decision.reason}", file=sys.stderr)
+        return 2
+    return 0
+
+
+def _summarize(tool_input: dict) -> dict:
+    return {
+        k: (v[:300] if isinstance(v, str) else v)
+        for k, v in tool_input.items()
+        if k in ("command", "file_path", "notebook_path", "pattern", "path")
+    }

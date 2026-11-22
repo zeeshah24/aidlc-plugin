@@ -1,0 +1,32 @@
+# Headless AI-DLC run in CI. Copy to .github/workflows/aidlc.yml in the target repository.
+name: aidlc
+on:
+  workflow_dispatch:
+    inputs:
+      ticket: {description: "Jira key or requirement file", required: true}
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: npm install -g @anthropic-ai/claude-code
+      - run: pip install "git+https://github.com/zeeshah24/aidlc-plugin#subdirectory=orchestrator"
+      - name: Run pipeline
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
+          JIRA_BASE_URL: ${{ vars.JIRA_BASE_URL }}
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+        # --approve records explicit CI approval of the default human gates; drop it to stop at them.
+        run: aidlc run "${{ inputs.ticket }}" --headless --approve analyze,plan
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: aidlc-run, path: .aidlc/}

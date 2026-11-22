@@ -1,0 +1,88 @@
+"""Stage 0a: requirement intake from a markdown file or a Jira story."""
+
+from __future__ import annotations
+
+import base64
+import json
+import os
+import re
+import urllib.request
+from dataclasses import dataclass
+from pathlib import Path
+
+import yaml
+
+from aidlc.util import slugify
+
+TICKET_RE = re.compile(r"^[A-Z][A-Z0-9]+-\d+$")
+
+
+@dataclass
+class Requirement:
+    req_id: str
+    title: str
+    body: str
+    source: str
+
+
+def from_file(path: Path) -> Requirement:
+    text = path.read_text()
+    meta: dict = {}
+    if text.startswith("---"):
+        end = text.find("\n---", 3)
+        if end != -1:
+            meta = yaml.safe_load(text[3:end]) or {}
+            text = text[end + 4 :].lstrip()
+    heading = next((ln[2:].strip() for ln in text.splitlines() if ln.startswith("# ")), path.stem)
+    found = re.search(r"\b[A-Z][A-Z0-9]+-\d+\b", heading)
+    req_id = str(meta.get("id") or (found.group(0) if found else slugify(path.stem)))
+    title = str(meta.get("title") or heading)
+    return Requirement(req_id, title, text, f"file:{path}")
+
+
+def _jira_request(url: str) -> dict:
+    headers = {"Accept": "application/json"}
+    if os.environ.get("JIRA_PAT"):
+        headers["Authorization"] = f"Bearer {os.environ['JIRA_PAT']}"
+    elif os.environ.get("JIRA_EMAIL") and os.environ.get("JIRA_API_TOKEN"):
+        raw = f"{os.environ['JIRA_EMAIL']}:{os.environ['JIRA_API_TOKEN']}".encode()
+        headers["Authorization"] = "Basic " + base64.b64encode(raw).decode()
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310 - URL comes from project config
+        return json.loads(resp.read())
+
+
+def from_jira(key: str, jira_cfg: dict, fetch=_jira_request) -> Requirement:
+    base = (jira_cfg.get("base_url") or os.environ.get("JIRA_BASE_URL") or "").rstrip("/")
+    if not base:
+        raise ValueError("Jira base URL not configured (aidlc.yaml jira.base_url or JIRA_BASE_URL)")
+    ac_field = jira_cfg.get("acceptance_criteria_field")
+    data = fetch(f"{base}/rest/api/2/issue/{key}")
+    fields = data.get("fields", {})
+    summary = fields.get("summary", key)
+    parts = [f"# {key}: {summary}", ""]
+    meta = []
+    for label, value in (
+        ("Type", (fields.get("issuetype") or {}).get("name")),
+        ("Priority", (fields.get("priority") or {}).get("name")),
+        ("Labels", ", ".join(fields.get("labels") or [])),
+    ):
+        if value:
+            meta.append(f"- **{label}:** {value}")
+    parts += [*meta, "", "## Description", "", fields.get("description") or "_No description._"]
+    if ac_field and fields.get(ac_field):
+        parts += ["", "## Acceptance Criteria", "", str(fields[ac_field])]
+    parts += ["", f"_Source: {base}/browse/{key}_"]
+    return Requirement(key, summary, "\n".join(parts) + "\n", f"jira:{key}")
+
+
+def write_requirement(req: Requirement, aidlc_dir: Path) -> Path:
+    path = aidlc_dir / "requirements" / f"{req.req_id}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    front = yaml.safe_dump({"id": req.req_id, "title": req.title, "source": req.source}, sort_keys=False)
+    body = req.body
+    if body.startswith("---"):
+        end = body.find("\n---", 3)
+        body = body[end + 4 :].lstrip() if end != -1 else body
+    path.write_text(f"---\n{front}---\n\n{body}")
+    return path

@@ -1,0 +1,37 @@
+# AI-DLC project configuration.
+# Layering: plugin defaults -> .aidlc/org/ (from `aidlc init --org`) -> this file.
+# `models:` overrides models.yaml; `guardrails:` may only tighten (add denies, drop allows).
+project:
+  base_branch: main
+identity:                 # commits are authored by the agent identity, not the developer
+  name: aidlc-agent
+  email: aidlc-agent@users.noreply.github.com
+requirements:
+  id_pattern: '\b(?:REQ|AC|NFR)-\d+\b'
+pipeline:
+  human_gates: [analyze, plan]
+  max_retries: 2          # extra attempts inside a stage
+  max_loops: 3            # verify/review/scan/PR -> implement loops before fail-fast
+  worktree: true          # isolate each run in .aidlc/worktrees/<run-id>
+  branch_prefix: aidlc/
+  agent_timeout_s: 1800
+  test_timeout_s: 900
+  max_context_chars: 60000
+stack: {}                 # override detection, e.g. {test_command: "make test"}
+dependencies:
+  offline: false          # true: skip license/CVE lookups; proposals need human approval
+gates:
+  static:
+    block_severity: medium
+    complexity_threshold: 10
+    duplication_min_lines: 8
+    analyzers: [vulnerability, dead_code, circular_dependency, duplication, complexity, api_drift]
+    tools: []             # extra SARIF tools, e.g. {name: semgrep, command: "semgrep --config p/ci --sarif", category: vulnerability}
+pr:
+  enabled: true
+  draft: false
+  wait_for_checks_s: 0    # >0 enables the post-PR loop (poll checks, route failures back)
+  poll_interval_s: 30
+jira:
+  base_url: ""            # or JIRA_BASE_URL; auth via JIRA_EMAIL+JIRA_API_TOKEN or JIRA_PAT
+  acceptance_criteria_field: ""

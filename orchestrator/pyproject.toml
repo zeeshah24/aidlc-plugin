@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling==1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "aidlc"
+version = "0.1.0"
+description = "AI-DLC orchestrator: drives requirements through an agent pipeline to a reviewed PR"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["PyYAML==6.0.2"]
+
+[project.optional-dependencies]
+dev = ["pytest==8.3.3", "ruff==0.7.4"]
+
+[project.scripts]
+aidlc = "aidlc.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aidlc"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"../agents" = "aidlc/_plugin/agents"
+"../guardrails.yaml" = "aidlc/_plugin/guardrails.yaml"
+"../models.yaml" = "aidlc/_plugin/models.yaml"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
