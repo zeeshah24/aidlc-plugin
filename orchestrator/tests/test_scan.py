@@ -36,6 +36,8 @@ def test_builtin_analyzers(tmp_path: Path):
         "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    import outer\n"
     )
     assert scan.circular_imports(tmp_path, ["ini/__init__.py", "ini/sub.py", "outer.py"]) == []
+    (tmp_path / "ini" / "__init__.py").write_text("import typing as t\nif t.TYPE_CHECKING and True:\n    import outer\n")
+    assert scan.circular_imports(tmp_path, ["ini/__init__.py", "ini/sub.py", "outer.py"]) == []
     (tmp_path / "ini" / "__init__.py").write_text(
         "from typing import TYPE_CHECKING\nif not TYPE_CHECKING:\n    import outer\n"
     )

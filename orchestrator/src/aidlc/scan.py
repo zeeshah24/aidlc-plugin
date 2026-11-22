@@ -75,6 +75,15 @@ def _parse(root: Path, rel: str) -> ast.Module | None:
         return None
 
 
+def _type_checking_only(test: ast.expr) -> bool:
+    """True for `TYPE_CHECKING`, `<alias>.TYPE_CHECKING`, or an `and` that includes one."""
+    if isinstance(test, ast.BoolOp) and isinstance(test.op, ast.And):
+        return any(_type_checking_only(v) for v in test.values)
+    return (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (
+        isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
+    )
+
+
 def circular_imports(root: Path, files: list[str]) -> list[Finding]:
     py = [f for f in files if f.endswith(".py")]
     modules = {_module_name(f): f for f in py}
@@ -87,7 +96,7 @@ def circular_imports(root: Path, files: list[str]) -> list[Finding]:
         type_only = {
             id(n)
             for guard in ast.walk(tree)
-            if isinstance(guard, ast.If) and ast.unparse(guard.test) in ("TYPE_CHECKING", "typing.TYPE_CHECKING")
+            if isinstance(guard, ast.If) and _type_checking_only(guard.test)
             for stmt in guard.body
             for n in ast.walk(stmt)
         }
