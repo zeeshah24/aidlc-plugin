@@ -417,7 +417,10 @@ def vulture(root: Path) -> list[Finding]:
 
 
 def npm_audit(root: Path) -> list[Finding]:
-    data = json.loads(_run(["npm", "audit", "--json"], root).stdout or "{}")
+    proc = _run(["npm", "audit", "--json"], root)
+    data = json.loads(proc.stdout or "{}")
+    if "error" in data or ("vulnerabilities" not in data and proc.returncode != 0):
+        raise subprocess.SubprocessError(f"npm audit did not complete: {proc.stderr.strip()[-300:] or data.get('error')}")
     return [
         Finding(
             "npm-audit",
