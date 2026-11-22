@@ -58,11 +58,11 @@ def _parse_spec(word: str) -> tuple[str, str | None]:
     """`name==1.2`, `name@1.2`, `@scope/name@1.2` -> (name, exact version or None)."""
     if word.startswith("@"):
         name, _, version = word[1:].partition("@")
-        return "@" + name.lower(), version or None
+        return "@" + name.lower(), version.lstrip("=") or None
     m = re.match(r"^([^=<>~!@\[\s]+)(?:\[[^\]]*\])?(?:(==|@)([^,;\s]+))?", word)
     if not m:
         return word.lower(), None
-    return m.group(1).lower(), m.group(3) if m.group(2) else None
+    return m.group(1).lower(), m.group(3).lstrip("=") if m.group(2) else None
 
 
 def _install_targets(segment: str) -> list[tuple[str, str | None]]:

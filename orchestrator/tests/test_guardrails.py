@@ -50,6 +50,7 @@ def test_dependency_install_requires_plan_approval(rails, tmp_path: Path):
     (run_dir / "dependencies.json").write_text(json.dumps(deps))
     assert check_command("pip install requests==2.32.3", rails, run_dir).allowed
     assert check_command("npm install @scope/ui@1.0.0", rails, run_dir).allowed
+    assert check_command("pip install requests@=2.32.3", rails, run_dir).allowed
     assert not check_command("pip install requests", rails, run_dir).allowed
     assert not check_command("pip install 'requests>=2'", rails, run_dir).allowed
     assert not check_command("pip install requests==2.0.0", rails, run_dir).allowed
