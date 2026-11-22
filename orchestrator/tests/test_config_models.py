@@ -123,3 +123,12 @@ def test_state_from_newer_schema_is_refused_and_unknown_fields_dropped(tmp_path:
     (tmp_path / "state.json").write_text(json.dumps(data))
     with pytest.raises(SystemExit, match="newer aidlc"):
         RunState.load(tmp_path)
+
+
+def test_project_can_narrow_but_not_widen_tools_allow():
+    from aidlc.config import merge_guardrails
+
+    merged, _ = merge_guardrails({"tools": {"allow": ["WebFetch"]}}, {"tools": {"allow": []}})
+    assert merged["tools"]["allow"] == []
+    merged, warnings = merge_guardrails({"tools": {"allow": []}}, {"tools": {"allow": ["WebFetch"]}})
+    assert merged["tools"]["allow"] == [] and warnings

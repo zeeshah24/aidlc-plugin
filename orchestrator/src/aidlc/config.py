@@ -73,6 +73,10 @@ def merge_guardrails(base: dict, override: dict) -> tuple[dict, list[str]]:
         b_env["passthrough"] = _subset(b_env.get("passthrough", []), o_env["passthrough"], "env.passthrough", warnings)
     b_env["test_exclude"] = _union(b_env.get("test_exclude", []), o_env.get("test_exclude", []))
 
+    o_tools, b_tools = override.get("tools", {}), out.setdefault("tools", {})
+    if "allow" in o_tools:
+        b_tools["allow"] = _subset(b_tools.get("allow", []), o_tools["allow"], "tools.allow", warnings)
+
     out["prompt_rules"] = _union(out.get("prompt_rules", []), override.get("prompt_rules", []))
     return out, warnings
 
