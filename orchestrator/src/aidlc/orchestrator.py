@@ -272,6 +272,10 @@ class Pipeline:
                 return state.status
             state.status = "completed"
             return state.status
+        except PipelineError as exc:  # a preflight refusal ends the run; it must not stay "running"
+            state.status = "failed"
+            state.event("run", "failed", str(exc))
+            raise
         finally:
             finished = state.status in ("completed", "failed")
             if finished:
