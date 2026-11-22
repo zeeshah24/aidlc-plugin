@@ -74,7 +74,10 @@ class ClaudeCodeAdapter:
         else:
             cmd += ["--permission-mode", "acceptEdits"]
         if req.settings_file:
-            cmd += ["--settings", str(req.settings_file)]
+            # only the run's MCP config (none by default), not the developer's servers
+            mcp = req.settings_file.with_name("agent-mcp.json")
+            mcp.write_text('{"mcpServers": {}}\n')
+            cmd += ["--settings", str(req.settings_file), "--strict-mcp-config", "--mcp-config", str(mcp)]
         return cmd
 
     def run(self, req: AgentRequest) -> AgentResult:

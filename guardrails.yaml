@@ -88,6 +88,8 @@ commands:
     - "*-exec*"
     - "*-delete*"
     - "*.env*"
+tools:
+  allow: []               # network/MCP tools agents may use, e.g. ["mcp__atlassian__getJiraIssue"]; others are denied
 paths:
   protected:
     - ".git/**"

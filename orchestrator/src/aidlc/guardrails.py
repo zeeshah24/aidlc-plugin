@@ -24,6 +24,8 @@ from aidlc.config import load_config
 from aidlc.harness import AuditLog
 
 WRITE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
+NETWORK_TOOLS = {"WebFetch", "WebSearch"}
+GUARDED_MATCHER = "Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob|WebFetch|WebSearch|mcp__.*"
 READ_TOOLS = {"Read", "Grep", "Glob", "NotebookRead"}
 _SEGMENT_SPLIT = re.compile(r"\s*(?:&&|\|\||;|\||\n)\s*")
 
@@ -158,6 +160,10 @@ def check_read(file_path: str, guardrails: dict, jail: Path) -> Decision:
 
 
 def evaluate(tool_name: str, tool_input: dict, guardrails: dict, jail: Path, run_dir: Path | None) -> Decision:
+    if tool_name in NETWORK_TOOLS or tool_name.startswith("mcp__"):
+        if _match(tool_name, guardrails.get("tools", {}).get("allow", [])):
+            return Decision(True)
+        return Decision(False, f"{tool_name} is not in tools.allow (network and MCP tools are denied by default)")
     if tool_name == "Bash":
         return check_command(tool_input.get("command", ""), guardrails, run_dir)
     if tool_name in WRITE_TOOLS:

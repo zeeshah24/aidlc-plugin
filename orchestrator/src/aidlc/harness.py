@@ -86,12 +86,14 @@ def scoped_env(cfg: Config, paths: RunPaths, stage: str) -> dict[str, str]:
 def hook_settings(paths: RunPaths, guardrails: dict | None = None) -> Path:
     """Claude Code settings: guard hooks plus native deny rules, which Claude also applies inside
     Grep/Glob searches the hook only sees as a directory."""
+    from aidlc.guardrails import GUARDED_MATCHER
+
     cmd = f"{shlex.quote(sys.executable)} -m aidlc guard"
     settings = {
         "hooks": {
             "PreToolUse": [
                 {
-                    "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob",
+                    "matcher": GUARDED_MATCHER,
                     "hooks": [{"type": "command", "command": f"{cmd} pre-tool"}],
                 }
             ],

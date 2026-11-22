@@ -139,3 +139,12 @@ def test_allow_once_is_single_use_under_concurrency(tmp_path: Path):
     with ThreadPoolExecutor(8) as pool:
         results = list(pool.map(lambda _: permissions.check(*args)[0], range(8)))
     assert results.count(True) == 1
+
+
+def test_network_and_mcp_tools_denied_unless_allowed(tmp_path):
+    from aidlc.guardrails import evaluate
+
+    rails = {"tools": {"allow": ["mcp__atlassian__get*"]}}
+    assert not evaluate("WebFetch", {"url": "https://x"}, rails, tmp_path, None).allowed
+    assert not evaluate("mcp__github__create_pull_request", {}, rails, tmp_path, None).allowed
+    assert evaluate("mcp__atlassian__getJiraIssue", {}, rails, tmp_path, None).allowed
