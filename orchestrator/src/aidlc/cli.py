@@ -187,9 +187,12 @@ def cmd_outcomes(args: argparse.Namespace) -> int:
 
 
 def cmd_rate(args: argparse.Namespace) -> int:
-    _, (state, paths) = _open(args)
+    from aidlc import report
+
+    cfg, (state, paths) = _open(args)
     state.rating = args.score
     state.save(paths.run_dir)
+    report.write(cfg, state, paths)
     print(f"rated {state.run_id}: {args.score}/5")
     return 0
 
