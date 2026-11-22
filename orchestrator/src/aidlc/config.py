@@ -64,7 +64,9 @@ def merge_guardrails(base: dict, override: dict) -> tuple[dict, list[str]]:
     for key in ("allowed_licenses", "allowed_registries"):
         if key in o_dep:
             b_dep[key] = _subset(b_dep.get(key, []), o_dep[key], f"dependencies.{key}", warnings)
-    if o_dep.get("block_on_cve") is False and b_dep.get("block_on_cve", True):
+    if o_dep.get("block_on_cve") is True:
+        b_dep["block_on_cve"] = True
+    elif o_dep.get("block_on_cve") is False and b_dep.get("block_on_cve", True):
         warnings.append("guardrails: project cannot disable dependencies.block_on_cve")
     b_dep["install_commands"] = _union(b_dep.get("install_commands", []), o_dep.get("install_commands", []))
 
