@@ -16,7 +16,7 @@ from aidlc.harness import AuditLog, RunPaths
 from aidlc.runners import RUNNERS, Outcome, StageContext, StageError
 from aidlc.stages import LOOP_BACK, Stage
 from aidlc.state import RunState
-from aidlc.util import slugify, stamp
+from aidlc.util import sha256_file, slugify, stamp
 
 # Artifacts that are cheap and deterministic to regenerate (graceful degradation).
 DERIVABLE = {"stack_profile"}
@@ -137,6 +137,10 @@ class Pipeline:
             return bool(gitutil.changed_since(paths.workdir, state.base_sha))
         return paths.artifact(key).exists()
 
+    def dirty_hashes(self) -> dict[str, str]:
+        root = self.cfg.root
+        return {p: sha256_file(root / p) if (root / p).is_file() else "-" for p in sorted(gitutil.dirty_paths(root))}
+
     def execute(self, state: RunState, paths: RunPaths, stages: list[Stage], skip_passed: bool = False) -> str:
         audit = AuditLog(paths.audit_file)
         ctx = StageContext(self.cfg, state, paths, self.adapters, audit)
@@ -165,7 +169,7 @@ class Pipeline:
                         f"(run the producing stage first, e.g. --from {name})"
                     )
                 writes = in_place and name in ("test", "implement")
-                foreign = sorted(set(gitutil.dirty_paths(self.cfg.root)) - set(state.owned_paths)) if writes else []
+                foreign = [p for p, h in self.dirty_hashes().items() if state.owned_paths.get(p) != h] if writes else []
                 if foreign:
                     raise PipelineError(
                         f"stage '{name}' would discard uncommitted changes in this checkout "
@@ -182,7 +186,7 @@ class Pipeline:
                     outcome = Outcome("failed", str(exc))
                 finally:
                     if writes:  # also on Ctrl+C, so a resume recognises the agent's own edits
-                        state.owned_paths = gitutil.dirty_paths(self.cfg.root)
+                        state.owned_paths = self.dirty_hashes()
                 rec.duration_s = round(rec.duration_s + time.monotonic() - t0, 3)
                 rec.attempts = max(rec.attempts, 1)
                 rec.gate = outcome.gate or rec.gate

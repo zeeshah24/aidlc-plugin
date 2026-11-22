@@ -41,7 +41,7 @@ class RunState:
     loops: int = 0
     feedback: list[str] = field(default_factory=list)
     history: list[dict] = field(default_factory=list)
-    owned_paths: list[str] = field(default_factory=list)  # uncommitted paths left by this run's agents
+    owned_paths: dict[str, str] = field(default_factory=dict)  # path -> content hash left by this run's agents
 
     def stage(self, name: str) -> StageRecord:
         return self.stages.setdefault(name, StageRecord())

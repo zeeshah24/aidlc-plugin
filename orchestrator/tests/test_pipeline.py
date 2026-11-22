@@ -192,6 +192,10 @@ def test_in_place_writes_refuse_dirty_checkout(repo: Path):
     with pytest.raises(PipelineError, match="uncommitted"):
         pipe.execute(state, paths, stages.select(stage="implement"))
     assert (repo / "wip.py").exists() and not fake.calls
+    state.owned_paths = pipe.dirty_hashes()
+    (repo / "wip.py").write_text("x = 2\n")
+    with pytest.raises(PipelineError, match="uncommitted"):
+        pipe.execute(state, paths, stages.select(stage="implement"))
     state.stage("implement").status = "passed"
     pipe.execute(state, paths, stages.select(stage="implement"), skip_passed=True)
 
