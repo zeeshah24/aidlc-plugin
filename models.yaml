@@ -1,0 +1,23 @@
+# Model tier routing. Each stage maps to a tier name or an explicit {provider, model}.
+# Providers: claude (Claude Code CLI), codex (OpenAI Codex CLI).
+version: 1
+tiers:
+  fast:      {provider: claude, model: claude-haiku-4-5}
+  reasoning: {provider: claude, model: claude-opus-4-1}
+  coding:    {provider: claude, model: claude-sonnet-4-5}
+stages:
+  analyze: reasoning
+  plan: reasoning
+  test: coding
+  implement: coding
+  verify: reasoning
+  review: reasoning           # must differ from implement; e.g. {provider: codex, model: gpt-5}
+  pr: fast                    # post-PR CI failure triage
+rules:
+  reviewer_must_differ_from_implementer: true
+# Used only when a provider does not report cost. Edit to match your contract.
+pricing_usd_per_mtok:
+  claude-haiku-4-5:  {input: 1.0,  output: 5.0}
+  claude-sonnet-4-5: {input: 3.0,  output: 15.0}
+  claude-opus-4-1:   {input: 15.0, output: 75.0}
+  gpt-5:             {input: 1.25, output: 10.0}

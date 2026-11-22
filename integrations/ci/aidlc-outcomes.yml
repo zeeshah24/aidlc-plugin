@@ -1,0 +1,27 @@
+# Daily join of AI-DLC runs with PR outcomes. Copy to .github/workflows/aidlc-outcomes.yml in the target
+# repository. Sends only to the collector configured in aidlc.yaml (telemetry.enabled/endpoint).
+name: aidlc-outcomes
+on:
+  schedule: [{cron: "17 3 * * *"}]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pull-requests: read
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install "git+https://github.com/zeeshah24/aidlc-plugin@${{ vars.AIDLC_REF || 'main' }}#subdirectory=orchestrator"  # pin AIDLC_REF to a release tag
+      - name: Collect outcomes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OTEL_EXPORTER_OTLP_ENDPOINT: ${{ vars.OTEL_EXPORTER_OTLP_ENDPOINT }}
+          OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets.OTEL_EXPORTER_OTLP_HEADERS }}
+          AIDLC_TELEMETRY_SALT: ${{ secrets.AIDLC_TELEMETRY_SALT }}
+        run: aidlc outcomes --limit 500 --export > outcomes.jsonl
+      - uses: actions/upload-artifact@v4
+        with: {name: aidlc-outcomes, path: outcomes.jsonl, retention-days: 30}

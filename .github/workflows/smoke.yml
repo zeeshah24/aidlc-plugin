@@ -1,0 +1,38 @@
+# Nightly end-to-end smoke test against the real Claude Code CLI (the unit suite uses a fake adapter).
+# Needs the ANTHROPIC_API_KEY repository secret; skipped without it.
+name: smoke
+on:
+  schedule: [{cron: "0 6 * * *"}]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  claude:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      AIDLC_ISOLATED: "1"   # single-use GitHub-hosted VM
+    steps:
+      - if: env.ANTHROPIC_API_KEY == ''
+        run: echo "ANTHROPIC_API_KEY not set; skipping" && exit 0
+      - if: env.ANTHROPIC_API_KEY != ''
+        uses: actions/checkout@v4
+      - if: env.ANTHROPIC_API_KEY != ''
+        uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - if: env.ANTHROPIC_API_KEY != ''
+        name: Pipeline on a throwaway repo (no PR)
+        run: |
+          npm install -g @anthropic-ai/claude-code@2.1.330
+          pip install "./orchestrator[dev]"
+          mkdir /tmp/demo && cd /tmp/demo && git init -q -b main
+          git config user.email smoke@example.com && git config user.name smoke
+          printf 'def placeholder():\n    return None\n' > calc.py && git add -A && git commit -qm init
+          printf '# DEMO-1: add\n\n- **REQ-1**: `calc.add(a, b)` returns the sum.\n- **AC-1** (REQ-1): add(2, 3) == 5.\n' > DEMO-1.md
+          aidlc init
+          aidlc run DEMO-1.md --headless --approve analyze,plan --to scan
+          aidlc status
+      - if: always() && env.ANTHROPIC_API_KEY != ''
+        uses: actions/upload-artifact@v4
+        with: {name: smoke-run, path: /tmp/demo/.aidlc, include-hidden-files: true}
