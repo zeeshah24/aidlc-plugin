@@ -87,7 +87,7 @@ def circular_imports(root: Path, files: list[str]) -> list[Finding]:
         type_only = {
             id(n)
             for guard in ast.walk(tree)
-            if isinstance(guard, ast.If) and "TYPE_CHECKING" in ast.unparse(guard.test)
+            if isinstance(guard, ast.If) and ast.unparse(guard.test) in ("TYPE_CHECKING", "typing.TYPE_CHECKING")
             for stmt in guard.body
             for n in ast.walk(stmt)
         }
