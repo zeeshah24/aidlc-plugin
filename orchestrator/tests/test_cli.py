@@ -76,6 +76,47 @@ def test_guard_hook_blocks_with_exit_2(repo: Path, tmp_path: Path):
     assert lines.count("tool.blocked") == 2 and "tool.allowed" in lines
 
 
+def test_guard_hook_ask_tier(repo: Path, tmp_path: Path):
+    from aidlc import permissions
+
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    env = {"AIDLC_RUN_DIR": str(run_dir), "AIDLC_JAIL": str(repo), "AIDLC_PROJECT_ROOT": str(repo)}
+    env |= {"PATH": "/usr/bin:/bin", "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
+    env |= {"AIDLC_STAGE": "implement"}
+    payload = json.dumps({"cwd": str(repo), "tool_name": "Bash", "tool_input": {"command": "terraform plan"}})
+
+    def hook(**extra) -> subprocess.CompletedProcess:
+        cmd = [sys.executable, "-m", "aidlc", "guard", "pre-tool"]
+        return subprocess.run(cmd, input=payload, capture_output=True, text=True, env=env | extra)
+
+    headless = hook()
+    assert headless.returncode == 2 and "headless" in headless.stderr
+    assert not permissions.load(run_dir)
+
+    assert hook(AIDLC_INTERACTIVE="1").returncode == 2
+    [req] = permissions.pending(run_dir)
+    assert req["stage"] == "implement" and req["subject"] == "command:terraform plan"
+    permissions.decide(run_dir, req["id"], "once")
+    assert hook(AIDLC_INTERACTIVE="1").returncode == 0
+    assert hook(AIDLC_INTERACTIVE="1").returncode == 2  # once means once
+    permissions.decide(run_dir, req["id"], "deny")
+    denied = hook(AIDLC_INTERACTIVE="1")
+    assert denied.returncode == 2 and "denied by the developer" in denied.stderr
+    events = [json.loads(line)["event"] for line in (run_dir / "audit.jsonl").read_text().splitlines()]
+    assert {"permission.requested", "permission.granted", "permission.used", "permission.denied"} <= set(events)
+
+    sudo = json.dumps({"cwd": str(repo), "tool_name": "Bash", "tool_input": {"command": "sudo ls"}})
+    proc = subprocess.run(
+        [sys.executable, "-m", "aidlc", "guard", "pre-tool"],
+        input=sudo,
+        capture_output=True,
+        text=True,
+        env=env | {"AIDLC_INTERACTIVE": "1"},
+    )
+    assert proc.returncode == 2 and len(permissions.load(run_dir)) == 1  # deny tier never asks
+
+
 def test_guard_hook_noop_without_active_run(tmp_path: Path):
     proc = subprocess.run(
         [sys.executable, "-m", "aidlc", "guard", "pre-tool"],

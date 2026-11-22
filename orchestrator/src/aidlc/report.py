@@ -6,6 +6,7 @@ import json
 from dataclasses import asdict
 from pathlib import Path
 
+from aidlc import permissions
 from aidlc.config import Config
 from aidlc.harness import RunPaths
 from aidlc.stages import STAGES
@@ -55,6 +56,14 @@ def build(cfg: Config, state: RunState, paths: RunPaths) -> str:
     notes = [(n, r.notes) for n, r in state.stages.items() if r.notes]
     if notes:
         lines += ["## Notes", ""] + [f"- **{n}:** {msg}" for n, ns in notes for msg in ns] + [""]
+    requests = permissions.load(paths.run_dir)
+    if requests:
+        lines += ["## Guardrail approvals", "", "| Id | Stage | Decision | Action | Reason |", "|---|---|---|---|---|"]
+        lines += [
+            f"| {r['id']} | {r['stage']} | {r['status']} | `{r['subject'][:120]}` | {_cell(r['reason'])} |"
+            for r in requests
+        ]
+        lines.append("")
     if state.history:
         lines += ["## Timeline", "", "| Time | Stage | Outcome | Detail |", "|---|---|---|---|"]
         lines += [
@@ -80,3 +89,7 @@ def write(cfg: Config, state: RunState, paths: RunPaths) -> Path:
     }
     (paths.run_dir / "report.json").write_text(json.dumps(data, indent=2) + "\n")
     return out
+
+
+def _cell(text: str) -> str:
+    return text.replace("|", "/").replace("\n", " ")[:160]

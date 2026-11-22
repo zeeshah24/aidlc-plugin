@@ -83,8 +83,9 @@ def scoped_env(cfg: Config, paths: RunPaths, stage: str) -> dict[str, str]:
     return env
 
 
-def hook_settings(paths: RunPaths) -> Path:
-    """Claude Code settings file wiring the guard hooks for agent subprocesses."""
+def hook_settings(paths: RunPaths, guardrails: dict | None = None) -> Path:
+    """Claude Code settings: guard hooks plus native deny rules, which Claude also applies inside
+    Grep/Glob searches the hook only sees as a directory."""
     cmd = f"{shlex.quote(sys.executable)} -m aidlc guard"
     settings = {
         "hooks": {
@@ -96,6 +97,10 @@ def hook_settings(paths: RunPaths) -> Path:
             ],
             "PostToolUse": [{"matcher": "*", "hooks": [{"type": "command", "command": f"{cmd} post-tool"}]}],
         }
+    }
+    rails = (guardrails or {}).get("paths", {})
+    settings["permissions"] = {
+        "deny": [f"Read({p})" for p in rails.get("no_read", [])] + [f"Edit({p})" for p in rails.get("protected", [])]
     }
     path = paths.run_dir / "agent-settings.json"
     path.write_text(json.dumps(settings, indent=2))

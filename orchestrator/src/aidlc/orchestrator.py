@@ -9,7 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from aidlc import gitutil, harness, intake, models, report
+from aidlc import gitutil, harness, intake, models, permissions, report
 from aidlc.adapters import AgentAdapter, default_adapters
 from aidlc.config import Config
 from aidlc.harness import AuditLog, RunPaths
@@ -130,6 +130,18 @@ class Pipeline:
         record_approval(state, paths, stage, explicit=explicit)
         return True
 
+    def decide_permissions(self, waiting: list[dict], paths: RunPaths) -> bool:
+        allowed = False
+        for w in waiting:
+            answer = self.ask(
+                f"Guardrail approval {w['id']} ({w['stage']}): {w['reason']}\n  {w['subject']}\n"
+                "  Allow [o]nce, for the [r]un, or [N]o? "
+            )
+            choice = {"o": "once", "once": "once", "r": "run", "run": "run"}.get(answer.strip().lower(), "deny")
+            permissions.decide(paths.run_dir, w["id"], choice)
+            allowed = allowed or choice != "deny"
+        return allowed
+
     # --- execution -----------------------------------------------------------------------------
 
     def present(self, key: str, state: RunState, paths: RunPaths) -> bool:
@@ -143,7 +155,7 @@ class Pipeline:
 
     def execute(self, state: RunState, paths: RunPaths, stages: list[Stage], skip_passed: bool = False) -> str:
         audit = AuditLog(paths.audit_file)
-        ctx = StageContext(self.cfg, state, paths, self.adapters, audit)
+        ctx = StageContext(self.cfg, state, paths, self.adapters, audit, interactive=not self.options.headless)
         names = [s.name for s in stages]
         by_name = {s.name: s for s in stages}
         gates = set(self.cfg.get("pipeline.human_gates", []) or [])
@@ -193,6 +205,23 @@ class Pipeline:
                 state.event(name, outcome.status, outcome.detail)
                 audit.log("stage.end", stage=name, outcome=outcome.status, detail=outcome.detail[:500])
                 self.out(f"    {outcome.status}: {outcome.detail}")
+
+                waiting = permissions.pending(paths.run_dir, name)
+                if waiting and outcome.status == "passed":
+                    permissions.expire(paths.run_dir, name)
+                elif waiting:
+                    if not self._interactive():
+                        rec.status = state.status = "awaiting_permission"
+                        ids = " ".join(w["id"] for w in waiting)
+                        self.out(
+                            f"    awaiting developer approval: `aidlc allow {ids}` (or `aidlc deny {ids}`), "
+                            "then `aidlc run --resume`"
+                        )
+                        return state.status
+                    if self.decide_permissions(waiting, paths):
+                        rec.status = "pending"
+                        self.out(f"    re-running {name} with the developer's allowances")
+                        continue
 
                 if outcome.status in ("passed", "skipped"):
                     rec.status = outcome.status

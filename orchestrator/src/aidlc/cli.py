@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -15,7 +16,7 @@ from aidlc.config import AIDLC_DIR, PROJECT_FILE, load_config
 from aidlc.orchestrator import Pipeline, PipelineError, RunOptions, interactive_ask, record_approval
 from aidlc.resources import template
 
-EXIT = {"completed": 0, "awaiting_approval": 3, "changes_requested": 1, "failed": 1}
+EXIT = {"completed": 0, "awaiting_approval": 3, "awaiting_permission": 3, "changes_requested": 1, "failed": 1}
 ORG_FILES = ("guardrails.yaml", "models.yaml", PROJECT_FILE, "conventions.md")
 
 
@@ -136,6 +137,23 @@ def cmd_approve(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_permission(args: argparse.Namespace) -> int:
+    from aidlc import permissions
+
+    _, (_state, paths) = _open(args)
+    if not args.ids:
+        waiting = permissions.pending(paths.run_dir)
+        for w in waiting:
+            print(f"{w['id']}  [{w['stage']}] {w['reason']}\n          {w['subject']}")
+        print("" if waiting else "no pending approval requests", end="\n" if not waiting else "")
+        return 0
+    choice = "deny" if args.choice == "deny" else ("run" if args.for_run else "once")
+    for rid in args.ids:
+        permissions.decide(paths.run_dir, rid, choice)
+        print(f"{'denied' if choice == 'deny' else 'allowed (' + choice + ')'} {rid}")
+    return 0
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     _, (state, _paths) = _open(args)
     if args.json:
@@ -185,6 +203,8 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
     ok = True
     for tool in ("git", "claude", "codex", "gh", "pip-audit", "bandit", "vulture", "npm", "madge"):
         print(f"{'ok ' if shutil.which(tool) else '-- '} {tool}")
+    isolated = bool(cfg.get("harness.isolated")) or os.environ.get("AIDLC_ISOLATED") == "1"
+    print(f"{'ok ' if isolated else '-- '} isolated agent runtime (container/VM)")
     for err in models.validate(cfg):
         ok = False
         print(f"ERR {err}")
@@ -234,6 +254,14 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("stages", nargs="*")
     s.add_argument("--run")
     s.set_defaults(fn=cmd_approve)
+
+    for verb, text in (("allow", "approve"), ("deny", "deny")):
+        s = sub.add_parser(verb, help=f"{text} pending ask-tier guardrail requests (no ids: list them)")
+        s.add_argument("ids", nargs="*")
+        s.add_argument("--run")
+        if verb == "allow":
+            s.add_argument("--for-run", action="store_true", help="allow for the rest of the run, not just once")
+        s.set_defaults(fn=cmd_permission, choice=verb, for_run=False)
 
     s = sub.add_parser("status", help="show run status")
     s.add_argument("--run")

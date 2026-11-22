@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 
 from aidlc.config import Config
@@ -32,6 +33,9 @@ def resolve(cfg: Config, stage: str) -> ModelChoice:
     return ModelChoice(tier, spec.get("provider", base.get("provider")), spec.get("model", base.get("model")))
 
 
+WRITABLE_STAGES = ("test", "implement")
+
+
 def validate(cfg: Config) -> list[str]:
     """Return config errors; enforces implementer != reviewer."""
     errors = []
@@ -42,6 +46,17 @@ def validate(cfg: Config) -> list[str]:
             errors.append(str(exc))
     if errors:
         return errors
+    isolated = bool(cfg.get("harness.isolated")) or os.environ.get("AIDLC_ISOLATED") == "1"
+    for stage in WRITABLE_STAGES:
+        try:
+            provider = resolve(cfg, stage).provider
+        except ModelConfigError:
+            continue
+        if not isolated and provider == "codex":
+            errors.append(
+                f"stage '{stage}' routes to codex, which has no pre-tool guard hooks; route it to claude "
+                "or run agents in the aidlc container (harness.isolated)"
+            )
     rules = cfg.models.get("rules", {})
     if rules.get("reviewer_must_differ_from_implementer", True):
         impl, rev = resolve(cfg, "implement"), resolve(cfg, "review")

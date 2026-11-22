@@ -17,6 +17,8 @@ pipeline:
   agent_timeout_s: 1800
   test_timeout_s: 900
   max_context_chars: 60000
+harness:
+  isolated: false         # true only when agents run in a container/VM (integrations/container sets AIDLC_ISOLATED=1)
 stack: {}                 # override detection, e.g. {test_command: "make test"}
 dependencies:
   offline: false          # true: skip license/CVE lookups; proposals need human approval
