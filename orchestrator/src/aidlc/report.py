@@ -10,7 +10,7 @@ from aidlc import permissions
 from aidlc.config import Config
 from aidlc.harness import RunPaths
 from aidlc.stages import STAGES
-from aidlc.state import RunState
+from aidlc.state import RunState, atomic_write
 
 
 def _fmt_time(seconds: float) -> str:
@@ -89,7 +89,7 @@ def write(cfg: Config, state: RunState, paths: RunPaths) -> Path:
         "loops": state.loops,
         "stages": {k: asdict(v) for k, v in state.stages.items()},
     }
-    (paths.run_dir / "report.json").write_text(json.dumps(data, indent=2) + "\n")
+    atomic_write(paths.run_dir / "report.json", json.dumps(data, indent=2) + "\n")
     return out
 
 

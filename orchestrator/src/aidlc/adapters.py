@@ -134,13 +134,14 @@ class CodexAdapter:
             "--sandbox",
             sandbox,
             "--skip-git-repo-check",
-            req.prompt,
+            "-",  # read the prompt from stdin: keeps it out of argv/ps and avoids argument-length limits
         ]
 
     def run(self, req: AgentRequest) -> AgentResult:
         start = time.monotonic()
         proc = subprocess.run(
             self.command(req),
+            input=req.prompt,
             cwd=req.workdir,
             env=req.env,
             capture_output=True,

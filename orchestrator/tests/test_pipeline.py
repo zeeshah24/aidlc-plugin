@@ -258,3 +258,33 @@ def test_headless_never_requests_permission(repo: Path, requirement: Path):
     state, paths = pipe.start(intake.from_file(requirement))
     assert pipe.execute(state, paths, stages.select()) == "failed"
     assert permissions.load(paths.run_dir) == []
+
+
+def test_agent_timeout_fails_stage_cleanly(repo: Path, requirement: Path):
+    import subprocess
+
+    def hang(_req):
+        raise subprocess.TimeoutExpired("claude", 5)
+
+    pipe, _ = pipeline(repo, Script(analyze=[hang]))
+    state, paths = pipe.start(intake.from_file(requirement))
+    assert pipe.execute(state, paths, stages.select()) == "failed"
+    assert state.stages["analyze"].status == "failed"
+    assert "timed out" in json.dumps(state.history)
+
+
+def test_budget_stops_run(repo: Path, requirement: Path):
+    pipe, _ = pipeline(repo, Script())
+    pipe.cfg.project.setdefault("pipeline", {})["max_tokens"] = 1
+    state, paths = pipe.start(intake.from_file(requirement))
+    assert pipe.execute(state, paths, stages.select()) == "failed"
+    assert "budget exceeded" in json.dumps(state.history)
+
+
+def test_run_cannot_execute_twice_concurrently(repo: Path, requirement: Path):
+    from aidlc.state import run_lock
+
+    pipe, _ = pipeline(repo, Script())
+    state, paths = pipe.start(intake.from_file(requirement))
+    with run_lock(paths.run_dir), pytest.raises(SystemExit, match="already executing"):
+        pipe.execute(state, paths, stages.select())

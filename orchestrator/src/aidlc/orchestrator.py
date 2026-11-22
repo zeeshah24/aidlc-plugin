@@ -15,7 +15,7 @@ from aidlc.config import Config
 from aidlc.harness import AuditLog, RunPaths
 from aidlc.runners import RUNNERS, Outcome, StageContext, StageError
 from aidlc.stages import LOOP_BACK, Stage
-from aidlc.state import RunState
+from aidlc.state import RunState, run_lock
 from aidlc.util import now_iso, sha256_file, slugify, stamp
 
 # Artifacts that are cheap and deterministic to regenerate (graceful degradation).
@@ -156,6 +156,10 @@ class Pipeline:
         return {p: sha256_file(root / p) if (root / p).is_file() else "-" for p in sorted(gitutil.dirty_paths(root))}
 
     def execute(self, state: RunState, paths: RunPaths, stages: list[Stage], skip_passed: bool = False) -> str:
+        with run_lock(paths.run_dir):
+            return self._execute(state, paths, stages, skip_passed)
+
+    def _execute(self, state: RunState, paths: RunPaths, stages: list[Stage], skip_passed: bool) -> str:
         audit = AuditLog(paths.audit_file)
         ctx = StageContext(self.cfg, state, paths, self.adapters, audit, interactive=not self.options.headless)
         names = [s.name for s in stages]

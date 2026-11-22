@@ -92,7 +92,10 @@ def call_agent(ctx: StageContext, stage: str, prompt: str, writable: bool) -> Ag
     rec = ctx.state.stage(stage)
     (ctx.paths.run_dir / "prompts" / f"{stage}-{rec.attempts + 1}.md").write_text(prompt)
     ctx.audit.log("agent.start", stage=stage, provider=choice.provider, model=choice.model, writable=writable)
-    result = adapter.run(req)
+    try:
+        result = adapter.run(req)
+    except subprocess.TimeoutExpired:
+        result = AgentResult("", ok=False, error=f"timed out after {req.timeout_s}s (pipeline.agent_timeout_s)")
     cost = (
         result.cost_usd
         if result.cost_usd is not None
@@ -116,7 +119,19 @@ def call_agent(ctx: StageContext, stage: str, prompt: str, writable: bool) -> Ag
     )
     if not result.ok:
         raise StageError(f"agent for '{stage}' failed: {result.error or 'no output'}")
+    check_budget(ctx)
     return result
+
+
+def check_budget(ctx: StageContext) -> None:
+    """Stop the run once its total spend passes pipeline.max_cost_usd or pipeline.max_tokens."""
+    recs = ctx.state.stages.values()
+    cost, tokens = sum(r.cost_usd for r in recs), sum(r.tokens_in + r.tokens_out for r in recs)
+    max_cost, max_tokens = ctx.cfg.get("pipeline.max_cost_usd"), ctx.cfg.get("pipeline.max_tokens")
+    if max_cost and cost > float(max_cost):
+        raise StageError(f"budget exceeded: ${cost:.2f} > pipeline.max_cost_usd ${float(max_cost):.2f}")
+    if max_tokens and tokens > int(max_tokens):
+        raise StageError(f"budget exceeded: {tokens} tokens > pipeline.max_tokens {int(max_tokens)}")
 
 
 def run_tests(ctx: StageContext) -> tuple[int, str]:

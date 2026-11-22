@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -54,10 +57,36 @@ class RunState:
 
     def save(self, run_dir: Path) -> None:
         run_dir.mkdir(parents=True, exist_ok=True)
-        (run_dir / STATE_FILE).write_text(json.dumps(asdict(self), indent=2) + "\n")
+        atomic_write(run_dir / STATE_FILE, json.dumps(asdict(self), indent=2) + "\n")
 
     @classmethod
     def load(cls, run_dir: Path) -> RunState:
         data = json.loads((run_dir / STATE_FILE).read_text())
         data["stages"] = {k: StageRecord(**v) for k, v in data.get("stages", {}).items()}
         return cls(**data)
+
+
+def atomic_write(path: Path, text: str) -> None:
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    tmp.write_text(text)
+    os.replace(tmp, path)
+
+
+@contextmanager
+def run_lock(run_dir: Path) -> Iterator[None]:
+    """Only one process may execute a given run at a time."""
+    try:
+        import fcntl
+    except ImportError:  # Windows: no advisory locks; rely on a single executor
+        yield
+        return
+    run_dir.mkdir(parents=True, exist_ok=True)
+    with open(run_dir / "run.lock", "w") as fh:
+        try:
+            fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise SystemExit(f"aidlc: run {run_dir.name} is already executing in another process") from None
+        try:
+            yield
+        finally:
+            fcntl.flock(fh, fcntl.LOCK_UN)

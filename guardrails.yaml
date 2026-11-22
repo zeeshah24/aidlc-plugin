@@ -19,8 +19,6 @@ commands:
     - "git log*"
     - "git show*"
     - "git add*"
-    - "git restore*"
-    - "git checkout -- *"
     - "git rm *"
     - "git mv *"
     - "ls*"
