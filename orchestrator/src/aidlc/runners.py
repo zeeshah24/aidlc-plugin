@@ -10,7 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from aidlc import deps, github, gitutil, harness, models, prompts, report, scan, stack, telemetry, traceability
+from aidlc import deps, github, gitutil, harness, intake, models, prompts, report, scan, stack, telemetry, traceability
 from aidlc.adapters import AgentAdapter, AgentRequest, AgentResult
 from aidlc.config import Config
 from aidlc.guardrails import _match as guardrails_match
@@ -576,6 +576,9 @@ def pr_body(ctx: StageContext) -> str:
     spec, ver, rev = ctx.read("spec"), ctx.read("verification"), ctx.read("review")
     scan_md = (ctx.paths.run_dir / "scan.md").read_text() if (ctx.paths.run_dir / "scan.md").exists() else ""
     parts = [f"## {ctx.state.req_id}: {ctx.state.title}", "", f"Source: `{ctx.state.source}`", ""]
+    key, base = intake.jira_key(ctx.state.source), intake.jira_base(ctx.cfg.get("jira", {}) or {})
+    if key and base:
+        parts[-1:] = [f"Jira: [{key}]({base}/browse/{key})", ""]
     summary = section(spec, "Summary")
     if summary:
         parts += ["### Summary", summary, ""]
@@ -593,6 +596,18 @@ def pr_body(ctx: StageContext) -> str:
         trailer(ctx),
     ]
     return "\n".join(parts) + "\n"
+
+
+def jira_writeback(ctx: StageContext, url: str) -> None:
+    jira_cfg = ctx.cfg.get("jira", {}) or {}
+    key = intake.jira_key(ctx.state.source)
+    if not (key and jira_cfg.get("comment_on_pr") and intake.jira_base(jira_cfg)):
+        return
+    try:  # best effort: a Jira outage must not fail an opened PR
+        intake.jira_comment(key, f"AI-DLC opened {url} (run {ctx.state.run_id})", jira_cfg)
+        ctx.audit.log("jira.comment", key=key, url=url)
+    except (OSError, ValueError) as exc:
+        ctx.audit.log("jira.comment_failed", key=key, error=str(exc)[:300])
 
 
 def run_pr(ctx: StageContext) -> Outcome:
@@ -629,6 +644,7 @@ def run_pr(ctx: StageContext) -> Outcome:
         if proc.returncode != 0:
             return Outcome("failed", f"gh pr create failed: {proc.stderr.strip()[-500:]}")
         existing = {"url": proc.stdout.strip().splitlines()[-1]}
+        jira_writeback(ctx, existing["url"])
     else:
         github.gh(["pr", "edit", existing["url"], "--body-file", str(body_file)], ctx.workdir)
     label = pr_cfg.get("label", "aidlc")

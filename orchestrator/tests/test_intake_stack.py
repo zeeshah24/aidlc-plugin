@@ -68,3 +68,11 @@ def test_stack_detection(tmp_path: Path):
     assert "fastapi" in profile["frameworks"] and "jest" in profile["frameworks"]
     assert profile["test_command"] and profile["lint_command"] == "make lint"
     assert profile["test_globs"]
+
+
+def test_jira_comment_writes_back(monkeypatch):
+    sent = []
+    cfg = {"base_url": "https://jira.example.com/"}
+    intake.jira_comment("PROJ-1", "PR opened", cfg, lambda u, p: sent.append((u, p)))
+    assert sent == [("https://jira.example.com/rest/api/2/issue/PROJ-1/comment", {"body": "PR opened"})]
+    assert intake.jira_key("jira:PROJ-1") == "PROJ-1" and intake.jira_key("file:x.md") is None

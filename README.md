@@ -48,7 +48,9 @@ Without a terminal, the run stops with `awaiting_permission`; decide with `aidlc
 Requests and decisions go to the audit log and the run report. Project config can tighten the org tiers but
 not widen them.
 
-The guard sees what an agent asks for, not what a program does, so run agents isolated for team use:
+The guard is defence in depth, not the security boundary: it sees what an agent asks for, not what a program
+does, and allowed runners (`pytest`, `npm run`, `make test`) execute code the agent wrote. So `test` and
+`implement` require an isolated runtime by default (`harness.require_isolation`; an org can make it mandatory):
 
 ```bash
 scripts/aidlc-container.sh run requirements/x.md   # builds integrations/container/Dockerfile on first use
@@ -58,7 +60,18 @@ The container mounts only the repository, runs as your uid with no capabilities 
 gets only model keys, `GH_TOKEN` and Jira credentials. Set `AIDLC_NETWORK` to a Docker network whose egress
 only reaches your model API, git host and registry; the default `bridge` network is not restricted.
 Codex has no pre-tool hooks, so `aidlc` refuses to route `test` or `implement` to Codex outside the container
-(or another runtime you mark with `harness.isolated: true`).
+(or another runtime you mark with `harness.isolated: true`) even when isolation is otherwise relaxed.
+
+Other controls:
+- Agents get no MCP servers from the developer's setup, and `WebFetch`, `WebSearch` and MCP tools are denied
+  unless listed under `tools.allow`.
+- `aidlc.yaml` and `CONVENTIONS.md` are protected, and the hook uses the guardrails frozen at run start.
+- Requirement text, artifacts and diffs reach agents fenced as data; `VERDICT:` lines inside them are removed.
+- `pipeline.max_cost_usd` / `max_tokens` stop a run that overspends; `verify` fails while an `AC-` ID has no test.
+- `aidlc doctor` checks config keys, plugin/CLI versions, isolation and each provider's capabilities.
+
+Windows: run agents in the container (WSL2/Docker Desktop). Natively, permission files are not locked across
+processes and the hook script needs `sh`.
 
 ## Telemetry and outcomes
 
@@ -70,6 +83,6 @@ runs with merge, review, rework and revert data from GitHub. See [docs/TELEMETRY
 ## Development
 
 ```bash
-pip install -e "orchestrator[dev]"
+pip install -e "orchestrator[dev]"   # releases: tag vX.Y.Z (must match plugin.json) -> PyPI with provenance
 cd orchestrator && ruff check . && ruff format --check . && pytest -q
 ```

@@ -42,6 +42,12 @@ flowchart LR
 - **Telemetry (opt-in)** — content-free run records and OpenTelemetry traces go only to the adopter's own collector when enabled; `AIDLC-Run` trailers join runs with PR outcomes. See [TELEMETRY.md](TELEMETRY.md).
 - **Baseline-delta gating (brownfield)** — quality and security gates compare against the pre-change baseline, so only new issues introduced by the run block it.
 
+### Security boundary
+
+Isolation (a container or single-use VM with egress limited to approved hosts) is the boundary for stages that
+run agent-written code. Prompt rules, hooks and the command allowlist are defence in depth and audit; they
+cannot contain code executed through allowed test and build runners.
+
 ## 4. Principles
 
 1. **Artifacts over conversation** — every stage reads and writes files; chat history is not state.

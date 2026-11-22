@@ -49,3 +49,4 @@ pr:
 jira:
   base_url: ""            # or JIRA_BASE_URL; auth via JIRA_EMAIL+JIRA_API_TOKEN or JIRA_PAT
   acceptance_criteria_field: ""
+  comment_on_pr: false    # comment the PR link on the ticket after the PR opens

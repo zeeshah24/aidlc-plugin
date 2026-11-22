@@ -45,20 +45,36 @@ def from_file(path: Path) -> Requirement:
     return Requirement(req_id, title, text, f"file:{path}")
 
 
-def _jira_request(url: str) -> dict:
+def _jira_request(url: str, payload: dict | None = None) -> dict:
     headers = {"Accept": "application/json"}
+    if payload is not None:
+        headers["Content-Type"] = "application/json"
     if os.environ.get("JIRA_PAT"):
         headers["Authorization"] = f"Bearer {os.environ['JIRA_PAT']}"
     elif os.environ.get("JIRA_EMAIL") and os.environ.get("JIRA_API_TOKEN"):
         raw = f"{os.environ['JIRA_EMAIL']}:{os.environ['JIRA_API_TOKEN']}".encode()
         headers["Authorization"] = "Basic " + base64.b64encode(raw).decode()
-    req = urllib.request.Request(url, headers=headers)
+    data = json.dumps(payload).encode() if payload is not None else None
+    req = urllib.request.Request(url, data=data, headers=headers, method="POST" if data else "GET")
     with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310 - URL comes from project config
         return json.loads(resp.read())
 
 
+def jira_base(jira_cfg: dict) -> str:
+    return (jira_cfg.get("base_url") or os.environ.get("JIRA_BASE_URL") or "").rstrip("/")
+
+
+def jira_key(source: str) -> str | None:
+    return source.removeprefix("jira:") if source.startswith("jira:") else None
+
+
+def jira_comment(key: str, text: str, jira_cfg: dict, send=_jira_request) -> None:
+    """Write back to the ticket (e.g. the PR link) so traceability runs both ways."""
+    send(f"{jira_base(jira_cfg)}/rest/api/2/issue/{key}/comment", {"body": text})
+
+
 def from_jira(key: str, jira_cfg: dict, fetch=_jira_request) -> Requirement:
-    base = (jira_cfg.get("base_url") or os.environ.get("JIRA_BASE_URL") or "").rstrip("/")
+    base = jira_base(jira_cfg)
     if not base:
         raise ValueError("Jira base URL not configured (aidlc.yaml jira.base_url or JIRA_BASE_URL)")
     ac_field = jira_cfg.get("acceptance_criteria_field")
