@@ -144,14 +144,7 @@ class Pipeline:
         by_name = {s.name: s for s in stages}
         gates = set(self.cfg.get("pipeline.human_gates", []) or [])
         max_loops = int(self.cfg.get("pipeline.max_loops", 3))
-        writes = {"test", "implement"} & set(names)
         in_place = Path(state.workdir).resolve() == self.cfg.root.resolve()
-        foreign = sorted(set(gitutil.dirty_paths(self.cfg.root)) - set(state.owned_paths)) if in_place else []
-        if writes and foreign:
-            raise PipelineError(
-                f"stages {', '.join(sorted(writes))} would discard uncommitted changes in this checkout "
-                f"({', '.join(foreign[:5])}); commit or stash them first"
-            )
         state.status = "running"
         i = 0
         try:
@@ -171,6 +164,13 @@ class Pipeline:
                         f"stage '{name}' is missing prerequisites: {', '.join(missing)} "
                         f"(run the producing stage first, e.g. --from {name})"
                     )
+                writes = in_place and name in ("test", "implement")
+                foreign = sorted(set(gitutil.dirty_paths(self.cfg.root)) - set(state.owned_paths)) if writes else []
+                if foreign:
+                    raise PipelineError(
+                        f"stage '{name}' would discard uncommitted changes in this checkout "
+                        f"({', '.join(foreign[:5])}); commit or stash them first"
+                    )
                 self.out(f"[{stage.index}] {stage.title} ...")
                 rec.status = "running"
                 state.save(paths.run_dir)
@@ -180,10 +180,11 @@ class Pipeline:
                     outcome = RUNNERS[name](ctx)
                 except StageError as exc:
                     outcome = Outcome("failed", str(exc))
+                finally:
+                    if writes:  # also on Ctrl+C, so a resume recognises the agent's own edits
+                        state.owned_paths = gitutil.dirty_paths(self.cfg.root)
                 rec.duration_s = round(rec.duration_s + time.monotonic() - t0, 3)
                 rec.attempts = max(rec.attempts, 1)
-                if in_place and name in ("test", "implement"):
-                    state.owned_paths = gitutil.dirty_paths(self.cfg.root)
                 rec.gate = outcome.gate or rec.gate
                 state.event(name, outcome.status, outcome.detail)
                 audit.log("stage.end", stage=name, outcome=outcome.status, detail=outcome.detail[:500])

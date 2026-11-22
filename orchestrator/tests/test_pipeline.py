@@ -192,6 +192,8 @@ def test_in_place_writes_refuse_dirty_checkout(repo: Path):
     with pytest.raises(PipelineError, match="uncommitted"):
         pipe.execute(state, paths, stages.select(stage="implement"))
     assert (repo / "wip.py").exists() and not fake.calls
+    state.stage("implement").status = "passed"
+    pipe.execute(state, paths, stages.select(stage="implement"), skip_passed=True)
 
 
 def test_unavailable_provider_is_reported(repo: Path, requirement: Path):
