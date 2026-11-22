@@ -34,14 +34,14 @@ def _match(value: str, patterns: list[str]) -> str | None:
     return next((p for p in patterns if fnmatch.fnmatchcase(value, p)), None)
 
 
-def approved_packages(run_dir: Path | None) -> set[str]:
+def approved_packages(run_dir: Path | None) -> dict[str, str | None]:
     if not run_dir:
-        return set()
+        return {}
     path = run_dir / "dependencies.json"
     if not path.exists():
-        return set()
+        return {}
     deps = json.loads(path.read_text()).get("dependencies", [])
-    return {d["name"].lower() for d in deps if d.get("status") == "approved"}
+    return {d["name"].lower(): d.get("version") for d in deps if d.get("status") == "approved"}
 
 
 def locked_paths(run_dir: Path | None) -> set[str]:
@@ -51,7 +51,18 @@ def locked_paths(run_dir: Path | None) -> set[str]:
     return set(json.loads(path.read_text()).get("files", {})) if path.exists() else set()
 
 
-def _install_targets(segment: str) -> list[str]:
+def _parse_spec(word: str) -> tuple[str, str | None]:
+    """`name==1.2`, `name@1.2`, `@scope/name@1.2` -> (name, exact version or None)."""
+    if word.startswith("@"):
+        name, _, version = word[1:].partition("@")
+        return "@" + name.lower(), version or None
+    m = re.match(r"^([^=<>~!@\[\s]+)(?:\[[^\]]*\])?(?:(==|@)([^,;\s]+))?", word)
+    if not m:
+        return word.lower(), None
+    return m.group(1).lower(), m.group(3) if m.group(2) else None
+
+
+def _install_targets(segment: str) -> list[tuple[str, str | None]]:
     try:
         words = shlex.split(segment)
     except ValueError:
@@ -59,13 +70,7 @@ def _install_targets(segment: str) -> list[str]:
     idx = next((i for i, w in enumerate(words) if w in {"install", "add", "get", "i"}), None)
     if idx is None:
         return []
-    names = []
-    for word in words[idx + 1 :]:
-        if word.startswith("-"):
-            continue
-        name = "@" + word[1:].split("@", 1)[0] if word.startswith("@") else re.split("[=<>~!@\\[]", word)[0]
-        names.append(name.lower())
-    return [n for n in names if n]
+    return [_parse_spec(w) for w in words[idx + 1 :] if not w.startswith("-")]
 
 
 def check_command(command: str, guardrails: dict, run_dir: Path | None = None) -> Decision:
@@ -80,9 +85,12 @@ def check_command(command: str, guardrails: dict, run_dir: Path | None = None) -
             return Decision(False, f"'{segment}' matches a deny rule")
         pkgs = _install_targets(segment) if _match(segment, installs) else []
         if pkgs:
-            missing = [p for p in pkgs if p not in approved]
+            missing = [n for n, _ in pkgs if n not in approved]
             if missing:
                 return Decision(False, f"dependency install not approved in the plan's dependency gate: {missing}")
+            wrong = [f"{n} (approved {approved[n]})" for n, v in pkgs if approved[n] and v != approved[n]]
+            if wrong:
+                return Decision(False, f"install must pin the approved version: {', '.join(wrong)}")
             continue
         if not _match(segment, cmd_cfg.get("allow", [])):
             return Decision(False, f"'{segment}' is not in the command allowlist")

@@ -40,9 +40,19 @@ def test_blocked_commands(rails, command):
 def test_dependency_install_requires_plan_approval(rails, tmp_path: Path):
     run_dir = tmp_path / "run"
     run_dir.mkdir()
-    deps = {"dependencies": [{"name": "requests", "status": "approved"}, {"name": "leftpad", "status": "rejected"}]}
+    deps = {
+        "dependencies": [
+            {"name": "requests", "version": "2.32.3", "status": "approved"},
+            {"name": "@scope/ui", "version": "1.0.0", "status": "approved"},
+            {"name": "leftpad", "status": "rejected"},
+        ]
+    }
     (run_dir / "dependencies.json").write_text(json.dumps(deps))
     assert check_command("pip install requests==2.32.3", rails, run_dir).allowed
+    assert check_command("npm install @scope/ui@1.0.0", rails, run_dir).allowed
+    assert not check_command("pip install requests", rails, run_dir).allowed
+    assert not check_command("pip install 'requests>=2'", rails, run_dir).allowed
+    assert not check_command("pip install requests==2.0.0", rails, run_dir).allowed
     assert not check_command("pip install leftpad", rails, run_dir).allowed
     assert not check_command("pip install requests flask", rails, run_dir).allowed
     assert not check_command("npm install @scope/pkg", rails, run_dir).allowed
