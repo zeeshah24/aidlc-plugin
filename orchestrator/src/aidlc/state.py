@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
-from aidlc.util import now_iso
+from aidlc.util import file_lock, now_iso
 
 STATE_FILE = "state.json"
 STATE_SCHEMA = 2  # bump with a migration in RunState.load when the layout changes
@@ -63,7 +63,7 @@ class RunState:
 
     @classmethod
     def load(cls, run_dir: Path) -> RunState:
-        data = json.loads((run_dir / STATE_FILE).read_text())
+        data = json.loads((run_dir / STATE_FILE).read_text(encoding="utf-8"))
         if data.get("schema", 1) > STATE_SCHEMA:
             raise SystemExit(f"aidlc: {run_dir.name} was written by a newer aidlc (state schema {data['schema']})")
         data["schema"] = STATE_SCHEMA
@@ -77,25 +77,14 @@ class RunState:
 
 def atomic_write(path: Path, text: str) -> None:
     tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    tmp.write_text(text)
+    tmp.write_text(text, encoding="utf-8")
     os.replace(tmp, path)
 
 
 @contextmanager
 def run_lock(run_dir: Path) -> Iterator[None]:
     """Only one process may execute a given run at a time."""
-    try:
-        import fcntl
-    except ImportError:  # Windows: no advisory locks; rely on a single executor
+    with file_lock(run_dir / "run.lock", blocking=False) as acquired:
+        if not acquired:
+            raise SystemExit(f"aidlc: run {run_dir.name} is already executing in another process")
         yield
-        return
-    run_dir.mkdir(parents=True, exist_ok=True)
-    with open(run_dir / "run.lock", "w") as fh:
-        try:
-            fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            raise SystemExit(f"aidlc: run {run_dir.name} is already executing in another process") from None
-        try:
-            yield
-        finally:
-            fcntl.flock(fh, fcntl.LOCK_UN)

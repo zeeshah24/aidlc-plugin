@@ -56,7 +56,7 @@ def isolation_errors(cfg: Config, stages: list[str]) -> list[str]:
         elif required and provider != "fake":
             errors.append(
                 f"stage '{stage}' runs agent-written code; run it in the aidlc container "
-                "(scripts/aidlc-container.sh) or set harness.require_isolation: false for a trusted local setup"
+                "(aidlc container ...) or set harness.require_isolation: false for a trusted local setup"
             )
     return errors
 

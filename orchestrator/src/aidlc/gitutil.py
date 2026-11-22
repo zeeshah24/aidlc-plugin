@@ -11,7 +11,7 @@ class GitError(RuntimeError):
 
 
 def git(args: list[str], cwd: Path, check: bool = True) -> str:
-    proc = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
+    proc = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if check and proc.returncode != 0:
         raise GitError(f"git {' '.join(args)} failed: {proc.stderr.strip()}")
     return proc.stdout
@@ -30,7 +30,14 @@ def head_sha(cwd: Path) -> str:
 
 
 def rev(cwd: Path, ref: str) -> str | None:
-    out = subprocess.run(["git", "rev-parse", "--verify", f"{ref}^{{commit}}"], cwd=cwd, capture_output=True, text=True)
+    out = subprocess.run(
+        ["git", "rev-parse", "--verify", f"{ref}^{{commit}}"],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
     return out.stdout.strip() if out.returncode == 0 else None
 
 

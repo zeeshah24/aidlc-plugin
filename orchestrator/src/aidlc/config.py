@@ -154,6 +154,6 @@ def load_config(root: Path) -> Config:
         ("repo", root / "CONVENTIONS.md"),
         ("project", root / AIDLC_DIR / "conventions.md"),
     ):
-        if path.exists() and path.read_text().strip():
-            conventions.append((layer, path.read_text().strip()))
+        if path.exists() and path.read_text(encoding="utf-8").strip():
+            conventions.append((layer, path.read_text(encoding="utf-8").strip()))
     return Config(root, project, models, guardrails, conventions, warnings)

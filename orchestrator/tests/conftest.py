@@ -15,7 +15,9 @@ FAKE_MODELS = {
 
 
 def sh(args: list[str], cwd: Path) -> str:
-    return subprocess.run(args, cwd=cwd, check=True, capture_output=True, text=True).stdout
+    return subprocess.run(
+        args, cwd=cwd, check=True, capture_output=True, text=True, encoding="utf-8", errors="replace"
+    ).stdout
 
 
 def commit(cwd: Path, message: str = "init") -> None:
@@ -28,10 +30,10 @@ def repo(tmp_path: Path) -> Path:
     root = tmp_path / "proj"
     root.mkdir()
     sh(["git", "init", "-q", "-b", "main"], root)
-    (root / "README.md").write_text("# demo\n")
-    (root / "pyproject.toml").write_text('[project]\nname = "demo"\nversion = "0.0.1"\n')
+    (root / "README.md").write_text("# demo\n", encoding="utf-8")
+    (root / "pyproject.toml").write_text('[project]\nname = "demo"\nversion = "0.0.1"\n', encoding="utf-8")
     (root / "tests").mkdir()
-    (root / "tests" / "test_smoke.py").write_text("def test_smoke():\n    assert True\n")
+    (root / "tests" / "test_smoke.py").write_text("def test_smoke():\n    assert True\n", encoding="utf-8")
     (root / "aidlc.yaml").write_text(
         yaml.safe_dump(
             {
@@ -41,7 +43,8 @@ def repo(tmp_path: Path) -> Path:
                 "dependencies": {"offline": True},
                 "models": FAKE_MODELS,
             }
-        )
+        ),
+        encoding="utf-8",
     )
     commit(root)
     return root
@@ -50,5 +53,5 @@ def repo(tmp_path: Path) -> Path:
 @pytest.fixture
 def requirement(tmp_path: Path) -> Path:
     path = tmp_path / "DEMO-1.md"
-    path.write_text("# DEMO-1: Add numbers\n\nProvide `calc.add(a, b)` returning the sum.\n")
+    path.write_text("# DEMO-1: Add numbers\n\nProvide `calc.add(a, b)` returning the sum.\n", encoding="utf-8")
     return path

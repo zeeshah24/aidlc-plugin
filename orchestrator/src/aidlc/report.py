@@ -82,7 +82,7 @@ def build(cfg: Config, state: RunState, paths: RunPaths) -> str:
 def write(cfg: Config, state: RunState, paths: RunPaths) -> Path:
     out = paths.report_file
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(build(cfg, state, paths))
+    out.write_text(build(cfg, state, paths), encoding="utf-8")
     data = {
         "run_id": state.run_id,
         "status": state.status,

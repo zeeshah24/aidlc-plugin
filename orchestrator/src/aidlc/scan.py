@@ -72,7 +72,7 @@ def _module_name(rel: str) -> str:
 
 def _parse(root: Path, rel: str) -> ast.Module | None:
     try:
-        return ast.parse((root / rel).read_text(errors="ignore"))
+        return ast.parse((root / rel).read_text(errors="ignore", encoding="utf-8"))
     except SyntaxError:
         return None
 
@@ -319,7 +319,10 @@ def duplication(root: Path, files: list[str], min_lines: int, exclude: list[str]
     for rel in files:
         if Path(rel).suffix not in SOURCE_EXT or _is_test(rel, exclude):
             continue
-        lines = [(i + 1, ln.strip()) for i, ln in enumerate((root / rel).read_text(errors="ignore").splitlines())]
+        lines = [
+            (i + 1, ln.strip())
+            for i, ln in enumerate((root / rel).read_text(errors="ignore", encoding="utf-8").splitlines())
+        ]
         lines = [(n, s) for n, s in lines if s and not _COMMENT.match(s) and len(s) > 2]
         for i in range(len(lines) - min_lines + 1):
             chunk = "\n".join(s for _, s in lines[i : i + min_lines])
@@ -356,7 +359,7 @@ def duplication(root: Path, files: list[str], min_lines: int, exclude: list[str]
 
 
 def _run(cmd: list[str], cwd: Path) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=600)
+    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=600, encoding="utf-8", errors="replace")
 
 
 def pip_audit(root: Path) -> list[Finding]:
@@ -553,7 +556,7 @@ def gate(
     fingerprint = hashlib.sha256(key.encode()).hexdigest()[:12]
     cache = cache_dir / f"scan-baseline-{base_sha[:12]}-{fingerprint}.json"
     if cache.exists():
-        base = json.loads(cache.read_text())
+        base = json.loads(cache.read_text(encoding="utf-8"))
     else:
         tmp = cache_dir / f"base-{base_sha[:12]}-{os.getpid()}"  # per process: concurrent runs must not share it
         if tmp.exists():
@@ -566,7 +569,7 @@ def gate(
             gitutil.git(["worktree", "remove", "--force", str(tmp)], repo, check=False)
         base = {"keys": sorted({f.key for f in res.findings}), "api": api}
         part = cache.with_name(f".{cache.name}.{os.getpid()}.tmp")
-        part.write_text(json.dumps(base))
+        part.write_text(json.dumps(base), encoding="utf-8")
         os.replace(part, cache)
 
     head = run_scanners(workdir, profile, gate_cfg)

@@ -19,8 +19,10 @@ def test_project_guardrails_only_tighten():
 def test_layers_org_then_project(repo: Path):
     org = repo / ".aidlc" / "org"
     org.mkdir(parents=True)
-    (org / "aidlc.yaml").write_text(yaml.safe_dump({"pipeline": {"max_loops": 9, "agent_timeout_s": 5}}))
-    (org / "conventions.md").write_text("Use type hints.")
+    (org / "aidlc.yaml").write_text(
+        yaml.safe_dump({"pipeline": {"max_loops": 9, "agent_timeout_s": 5}}), encoding="utf-8"
+    )
+    (org / "conventions.md").write_text("Use type hints.", encoding="utf-8")
     cfg = load_config(repo)
     assert cfg.get("pipeline.max_loops") == 2  # project wins
     assert cfg.get("pipeline.agent_timeout_s") == 5  # org over defaults
@@ -28,7 +30,7 @@ def test_layers_org_then_project(repo: Path):
 
 
 def test_default_routing_reviewer_differs(repo: Path):
-    (repo / "aidlc.yaml").write_text("{}\n")
+    (repo / "aidlc.yaml").write_text("{}\n", encoding="utf-8")
     cfg = load_config(repo)
     assert models.validate(cfg) == []
     assert models.resolve(cfg, "review") != models.resolve(cfg, "implement")
@@ -86,25 +88,25 @@ def test_project_cannot_relax_org_isolation(repo: Path):
 
     org = repo / ".aidlc" / "org"
     org.mkdir(parents=True)
-    (org / "aidlc.yaml").write_text(yaml.safe_dump({"harness": {"require_isolation": True}}))
-    data = yaml.safe_load((repo / "aidlc.yaml").read_text())
+    (org / "aidlc.yaml").write_text(yaml.safe_dump({"harness": {"require_isolation": True}}), encoding="utf-8")
+    data = yaml.safe_load((repo / "aidlc.yaml").read_text(encoding="utf-8"))
     for relaxed in (False, None, 0):
         data["harness"] = {"require_isolation": relaxed}
-        (repo / "aidlc.yaml").write_text(yaml.safe_dump(data))
+        (repo / "aidlc.yaml").write_text(yaml.safe_dump(data), encoding="utf-8")
         cfg = load_config(repo)
         assert cfg.get("harness.require_isolation") is True and any("isolation" in w for w in cfg.warnings)
     data["harness"] = {"isolated": True}
-    (repo / "aidlc.yaml").write_text(yaml.safe_dump(data))
+    (repo / "aidlc.yaml").write_text(yaml.safe_dump(data), encoding="utf-8")
     assert not load_config(repo).get("harness.isolated")
 
 
 def test_unknown_and_mistyped_keys_warn(repo: Path):
     import yaml
 
-    data = yaml.safe_load((repo / "aidlc.yaml").read_text())
+    data = yaml.safe_load((repo / "aidlc.yaml").read_text(encoding="utf-8"))
     data["pipline"] = {"max_loops": 1}
     data["pr"] = "yes"
-    (repo / "aidlc.yaml").write_text(yaml.safe_dump(data))
+    (repo / "aidlc.yaml").write_text(yaml.safe_dump(data), encoding="utf-8")
     warnings = load_config(repo).warnings
     assert any("unknown key 'pipline'" in w for w in warnings)
     assert any("'pr' must be a mapping" in w for w in warnings)
@@ -118,12 +120,12 @@ def test_state_from_newer_schema_is_refused_and_unknown_fields_dropped(tmp_path:
     from aidlc.state import RunState
 
     RunState("r", "R-1", "t", "s", "main", "abc", "b", str(tmp_path)).save(tmp_path)
-    data = json.loads((tmp_path / "state.json").read_text())
+    data = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
     data["stages"] = {"verify": {"status": "passed", "future_field": 1}}
-    (tmp_path / "state.json").write_text(json.dumps(data))
+    (tmp_path / "state.json").write_text(json.dumps(data), encoding="utf-8")
     assert RunState.load(tmp_path).stages["verify"].status == "passed"
     data["schema"] = 99
-    (tmp_path / "state.json").write_text(json.dumps(data))
+    (tmp_path / "state.json").write_text(json.dumps(data), encoding="utf-8")
     with pytest.raises(SystemExit, match="newer aidlc"):
         RunState.load(tmp_path)
 

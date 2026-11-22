@@ -51,8 +51,8 @@ def test_no_dependency_block():
 
 
 def test_traceability_matrix(tmp_path):
-    (tmp_path / "test_a.py").write_text("def test_ac1():  # AC-1\n    pass\n# AC-9\n")
-    (tmp_path / "a.py").write_text("# implements REQ-1\n")
+    (tmp_path / "test_a.py").write_text("def test_ac1():  # AC-1\n    pass\n# AC-9\n", encoding="utf-8")
+    (tmp_path / "a.py").write_text("# implements REQ-1\n", encoding="utf-8")
     spec = "REQ-1 ... AC-1 ... AC-2 ... AC-1"
     ids = traceability.requirement_ids(spec, r"\b(?:REQ|AC|NFR)-\d+\b")
     assert ids == ["REQ-1", "AC-1", "AC-2"]

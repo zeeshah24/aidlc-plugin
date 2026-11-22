@@ -31,13 +31,13 @@ def cmd_init(args: argparse.Namespace) -> int:
     aidlc_dir = root / AIDLC_DIR
     for sub in ("requirements", "runs", "reports"):
         (aidlc_dir / sub).mkdir(parents=True, exist_ok=True)
-    (aidlc_dir / ".gitignore").write_text("worktrees/\ncache/\ncurrent\nruns/*/prompts/\n")
+    (aidlc_dir / ".gitignore").write_text("worktrees/\ncache/\ncurrent\nruns/*/prompts/\n", encoding="utf-8")
     conv = aidlc_dir / "conventions.md"
     if not conv.exists():
-        conv.write_text(template("conventions.md"))
+        conv.write_text(template("conventions.md"), encoding="utf-8")
     cfg_file = root / PROJECT_FILE
     if not cfg_file.exists() or args.force:
-        cfg_file.write_text(template(PROJECT_FILE))
+        cfg_file.write_text(template(PROJECT_FILE), encoding="utf-8")
         print(f"wrote {cfg_file.relative_to(root)}")
     if args.org:
         copied = pull_org(args.org, aidlc_dir / "org")
@@ -60,7 +60,7 @@ def pull_org(source: str, dest: Path) -> list[str]:
             if (src / name).exists():
                 shutil.copy2(src / name, dest / name)
                 copied.append(name)
-    (dest / "SOURCE").write_text(source + "\n")
+    (dest / "SOURCE").write_text(source + "\n", encoding="utf-8")
     return copied
 
 
@@ -224,7 +224,7 @@ def cmd_report(args: argparse.Namespace) -> int:
     from aidlc import report
 
     cfg, (state, paths) = _open(args)
-    print(report.write(cfg, state, paths).read_text())
+    print(report.write(cfg, state, paths).read_text(encoding="utf-8"))
     return 0
 
 
@@ -260,9 +260,9 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
     for provider, caps in CAPABILITIES.items():
         print(f"     {provider:<9} " + ", ".join(f"{k}: {'yes' if v else 'no'}" for k, v in caps.items()))
     manifest = plugin_root() / ".claude-plugin" / "plugin.json"
-    if manifest.exists() and (plugin := json.loads(manifest.read_text()).get("version")) != __version__:
+    if manifest.exists() and (plugin := json.loads(manifest.read_text(encoding="utf-8")).get("version")) != __version__:
         ok = False
-        print(f"ERR plugin {plugin} and aidlc CLI {__version__} differ; reinstall with scripts/install.sh")
+        print(f"ERR plugin {plugin} and aidlc CLI {__version__} differ; reinstall the aidlc CLI")
     return 0 if ok else 1
 
 
@@ -270,6 +270,12 @@ def cmd_guard(args: argparse.Namespace) -> int:
     from aidlc.guardrails import hook_main
 
     return hook_main(args.event)
+
+
+def cmd_container(args: argparse.Namespace) -> int:
+    from aidlc import container
+
+    return container.main(args.args)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -345,6 +351,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("doctor", help="check tools and configuration").set_defaults(fn=cmd_doctor)
 
+    s = sub.add_parser("container", help="run aidlc inside the isolated agent container (Docker)")
+    s.add_argument("args", nargs=argparse.REMAINDER, help="aidlc arguments, e.g. run requirements/x.md")
+    s.set_defaults(fn=cmd_container)
+
     s = sub.add_parser("guard", help="guardrail hook entry point (Claude Code hooks)")
     s.add_argument("event", choices=["pre-tool", "post-tool"])
     s.set_defaults(fn=cmd_guard)
@@ -352,6 +362,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    if sys.platform == "win32":  # hook payloads and agent output are UTF-8, not the console code page
+        for stream in (sys.stdin, sys.stdout, sys.stderr):
+            if hasattr(stream, "reconfigure"):
+                stream.reconfigure(encoding="utf-8", errors="replace")
     args = build_parser().parse_args(argv)
     try:
         return args.fn(args)

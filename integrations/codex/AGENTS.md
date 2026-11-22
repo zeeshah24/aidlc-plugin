@@ -19,5 +19,5 @@ models:
 ```
 
 Codex CLI has no pre-tool hooks, so `aidlc` refuses to route the writing stages (`test`, `implement`) to Codex
-unless agents run isolated: use `scripts/aidlc-container.sh`, or set `harness.isolated: true` on a runtime that
+unless agents run isolated: use `aidlc container run ...`, or set `harness.isolated: true` on a runtime that
 is already an isolated container or VM. Read-only stages such as `review` can use Codex anywhere.

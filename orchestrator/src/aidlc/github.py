@@ -12,7 +12,9 @@ from aidlc.util import tail
 
 
 def gh(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
-    return subprocess.run(["gh", *args], cwd=cwd, capture_output=True, text=True, timeout=300)
+    return subprocess.run(
+        ["gh", *args], cwd=cwd, capture_output=True, text=True, timeout=300, encoding="utf-8", errors="replace"
+    )
 
 
 def wait_for_checks(cwd: Path, url: str, timeout_s: int, interval_s: int) -> list[dict] | None:

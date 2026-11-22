@@ -22,12 +22,12 @@ def plugin_root() -> Path:
 
 
 def template(name: str) -> str:
-    return (_PKG / "templates" / name).read_text()
+    return (_PKG / "templates" / name).read_text(encoding="utf-8")
 
 
 def agent_prompt(name: str) -> str:
     """Return the body of agents/<name>.md without its YAML frontmatter."""
-    text = (plugin_root() / "agents" / f"{name}.md").read_text()
+    text = (plugin_root() / "agents" / f"{name}.md").read_text(encoding="utf-8")
     if text.startswith("---"):
         end = text.find("\n---", 3)
         if end != -1:

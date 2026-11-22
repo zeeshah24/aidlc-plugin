@@ -53,7 +53,7 @@ class AuditLog:
 
     def log(self, event: str, **data) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open("a") as fh:
+        with self.path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps({"ts": now_iso(), "actor": self.actor, "event": event, **data}) + "\n")
 
 
@@ -64,13 +64,18 @@ def create_worktree(root: Path, run_id: str, branch: str, base: str) -> Path:
     return path
 
 
+def _env_key(name: str) -> str:
+    return name.upper() if os.name == "nt" else name  # Windows environment names ignore case
+
+
 def scoped_env(cfg: Config, paths: RunPaths, stage: str) -> dict[str, str]:
     """Only pass through allowlisted environment variables (scoped tokens)."""
-    allowed = cfg.guardrails.get("env", {}).get("passthrough", [])
-    env = {k: v for k, v in os.environ.items() if k in allowed}
+    env_rules = cfg.guardrails.get("env", {})
+    allowed = {_env_key(k) for k in env_rules.get("passthrough", [])}
+    env = {k: v for k, v in os.environ.items() if _env_key(k) in allowed}
     if stage == "tests":
-        for key in cfg.guardrails.get("env", {}).get("test_exclude", []):
-            env.pop(key, None)
+        excluded = {_env_key(k) for k in env_rules.get("test_exclude", [])}
+        env = {k: v for k, v in env.items() if _env_key(k) not in excluded}
     env.update(
         AIDLC_RUN_DIR=str(paths.run_dir),
         AIDLC_JAIL=str(paths.workdir),
@@ -88,12 +93,20 @@ GUARDRAILS_SNAPSHOT = "guardrails.json"
 
 def snapshot_guardrails(cfg: Config, paths: RunPaths) -> None:
     """Freeze the policy at run start so an agent editing project config mid-run cannot widen it."""
-    (paths.run_dir / GUARDRAILS_SNAPSHOT).write_text(json.dumps(cfg.guardrails, indent=2))
+    (paths.run_dir / GUARDRAILS_SNAPSHOT).write_text(json.dumps(cfg.guardrails, indent=2), encoding="utf-8")
 
 
 def run_guardrails(run_dir: Path, fallback: dict) -> dict:
     snap = run_dir / GUARDRAILS_SNAPSHOT
-    return json.loads(snap.read_text()) if snap.exists() else fallback
+    return json.loads(snap.read_text(encoding="utf-8")) if snap.exists() else fallback
+
+
+def hook_executable(executable: str = sys.executable, windows: bool = os.name == "nt") -> str:
+    """This Python, quoted for the shell Claude Code runs hooks in: sh, or Git Bash/PowerShell on Windows."""
+    if not windows:
+        return shlex.quote(executable)
+    exe = executable.replace("\\", "/")
+    return f'"{exe}"' if " " in exe else exe
 
 
 def hook_settings(paths: RunPaths, guardrails: dict | None = None) -> Path:
@@ -101,7 +114,7 @@ def hook_settings(paths: RunPaths, guardrails: dict | None = None) -> Path:
     Grep/Glob searches the hook only sees as a directory."""
     from aidlc.guardrails import GUARDED_MATCHER
 
-    cmd = f"{shlex.quote(sys.executable)} -m aidlc guard"
+    cmd = f"{hook_executable()} -m aidlc guard"
     settings = {
         "hooks": {
             "PreToolUse": [
@@ -118,5 +131,5 @@ def hook_settings(paths: RunPaths, guardrails: dict | None = None) -> Path:
         "deny": [f"Read({p})" for p in rails.get("no_read", [])] + [f"Edit({p})" for p in rails.get("protected", [])]
     }
     path = paths.run_dir / "agent-settings.json"
-    path.write_text(json.dumps(settings, indent=2))
+    path.write_text(json.dumps(settings, indent=2), encoding="utf-8")
     return path

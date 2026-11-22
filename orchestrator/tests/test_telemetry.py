@@ -15,9 +15,9 @@ from aidlc.orchestrator import Pipeline, RunOptions
 
 
 def configure(repo: Path, **tel) -> None:
-    cfg = yaml.safe_load((repo / "aidlc.yaml").read_text())
+    cfg = yaml.safe_load((repo / "aidlc.yaml").read_text(encoding="utf-8"))
     cfg["telemetry"] = tel
-    (repo / "aidlc.yaml").write_text(yaml.safe_dump(cfg))
+    (repo / "aidlc.yaml").write_text(yaml.safe_dump(cfg), encoding="utf-8")
 
 
 @pytest.fixture
@@ -48,7 +48,7 @@ def run(repo: Path, requirement: Path, **opts):
 
 
 def audit_events(paths) -> list[str]:
-    return [json.loads(line)["event"] for line in paths.audit_file.read_text().splitlines()]
+    return [json.loads(line)["event"] for line in paths.audit_file.read_text(encoding="utf-8").splitlines()]
 
 
 def test_disabled_by_default_sends_nothing(repo, requirement, collector, monkeypatch):
@@ -77,7 +77,7 @@ def test_enabled_exports_content_free_trace(repo, requirement, collector, monkey
     assert attrs["gen_ai.request.model"] == {"stringValue": "fake:fake-reason"}
     assert "gen_ai.usage.input_tokens" in attrs and attrs["aidlc.stage.status"] == {"stringValue": "passed"}
 
-    [record] = [json.loads(x) for x in (repo / ".aidlc/telemetry.jsonl").read_text().splitlines()]
+    [record] = [json.loads(x) for x in (repo / ".aidlc/telemetry.jsonl").read_text(encoding="utf-8").splitlines()]
     assert record["run_id"].startswith("h:") and record["team"] == "payments"
     assert record["repo"].startswith("h:") and "developer" not in record
     exported = json.dumps(post["body"]) + json.dumps(record)
@@ -106,7 +106,7 @@ def test_run_id_in_commits_and_pr_body(repo, requirement):
     state, paths = run(repo, requirement)
     log = sh(["git", "log", "--format=%B", f"{state.base_sha}..{state.branch}"], repo)
     assert log.count(f"AIDLC-Run: {state.run_id}") == 2
-    assert f"AIDLC-Run: {state.run_id}" in (paths.run_dir / "pr-body.md").read_text()
+    assert f"AIDLC-Run: {state.run_id}" in (paths.run_dir / "pr-body.md").read_text(encoding="utf-8")
 
 
 def test_rating_asked_at_end_of_interactive_run(repo, requirement):
@@ -117,7 +117,7 @@ def test_rating_asked_at_end_of_interactive_run(repo, requirement):
     state, paths = pipe.start(intake.from_file(requirement))
     assert pipe.execute(state, paths, stages.select()) == "completed"
     assert len(questions) == 1 and state.rating == 4
-    assert "Developer rating: 4/5" in paths.report_file.read_text()
+    assert "Developer rating: 4/5" in paths.report_file.read_text(encoding="utf-8")
 
 
 def test_rating_never_asked_headless(repo, requirement):
@@ -133,7 +133,9 @@ def test_rating_never_asked_headless(repo, requirement):
 def test_org_telemetry_policy_cannot_be_widened(repo):
     org = repo / ".aidlc" / "org"
     org.mkdir(parents=True)
-    (org / "aidlc.yaml").write_text(yaml.safe_dump({"telemetry": {"enabled": True, "endpoint": "https://otel.corp"}}))
+    (org / "aidlc.yaml").write_text(
+        yaml.safe_dump({"telemetry": {"enabled": True, "endpoint": "https://otel.corp"}}), encoding="utf-8"
+    )
     configure(repo, enabled=True, endpoint="https://elsewhere", raw_identifiers=True)
     cfg = load_config(repo)
     assert cfg.get("telemetry")["endpoint"] == "https://otel.corp"
@@ -180,7 +182,7 @@ def test_outcome_run_ids_hash_like_run_records(repo, requirement):
 def test_empty_org_telemetry_policy_still_owns_settings(repo):
     org = repo / ".aidlc" / "org"
     org.mkdir(parents=True)
-    (org / "aidlc.yaml").write_text(yaml.safe_dump({"telemetry": {}}))
+    (org / "aidlc.yaml").write_text(yaml.safe_dump({"telemetry": {}}), encoding="utf-8")
     configure(repo, enabled=True, endpoint="https://elsewhere")
     assert not telemetry.enabled(load_config(repo))
 
@@ -194,5 +196,5 @@ def test_interrupted_rating_still_finalises_run(repo, requirement):
     pipe = Pipeline(load_config(repo), {"fake": FakeAdapter(Script())}, RunOptions(), ask=ask, out=lambda _m: None)
     state, paths = pipe.start(intake.from_file(requirement))
     assert pipe.execute(state, paths, stages.select()) == "completed"
-    assert json.loads((paths.run_dir / "state.json").read_text())["status"] == "completed"
+    assert json.loads((paths.run_dir / "state.json").read_text(encoding="utf-8"))["status"] == "completed"
     assert paths.report_file.exists() and state.rating is None

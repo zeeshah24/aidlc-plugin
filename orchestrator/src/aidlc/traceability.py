@@ -18,7 +18,7 @@ def references(workdir: Path, files: list[str], pattern: str) -> dict[str, set[s
         if not path.is_file():
             continue
         try:
-            found = set(rx.findall(path.read_text(errors="ignore")))
+            found = set(rx.findall(path.read_text(errors="ignore", encoding="utf-8")))
         except OSError:
             continue
         if found:

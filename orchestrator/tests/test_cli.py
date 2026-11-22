@@ -18,7 +18,7 @@ def in_repo(repo: Path, monkeypatch) -> Path:
 def test_init_creates_runtime_dir(in_repo: Path, tmp_path: Path, capsys):
     org = tmp_path / "org"
     org.mkdir()
-    (org / "guardrails.yaml").write_text("commands: {deny: ['*terraform*']}\n")
+    (org / "guardrails.yaml").write_text("commands: {deny: ['*terraform*']}\n", encoding="utf-8")
     (in_repo / "aidlc.yaml").unlink()
     assert main(["init", "--org", str(org)]) == 0
     assert (in_repo / "aidlc.yaml").exists()
@@ -67,13 +67,15 @@ def test_guard_hook_blocks_with_exit_2(repo: Path, tmp_path: Path):
             capture_output=True,
             text=True,
             env=env,
+            encoding="utf-8",
+            errors="replace",
         )
 
     blocked = hook({"tool_name": "Bash", "tool_input": {"command": "git push origin main"}})
     assert blocked.returncode == 2 and "deny rule" in blocked.stderr
     assert hook({"tool_name": "Bash", "tool_input": {"command": "pytest -q"}}).returncode == 0
     assert hook({"tool_name": "Write", "tool_input": {"file_path": "/etc/passwd"}}).returncode == 2
-    lines = [json.loads(x)["event"] for x in (run_dir / "audit.jsonl").read_text().splitlines()]
+    lines = [json.loads(x)["event"] for x in (run_dir / "audit.jsonl").read_text(encoding="utf-8").splitlines()]
     assert lines.count("tool.blocked") == 2 and "tool.allowed" in lines
 
 
@@ -89,7 +91,9 @@ def test_guard_hook_ask_tier(repo: Path, tmp_path: Path):
 
     def hook(**extra) -> subprocess.CompletedProcess:
         cmd = [sys.executable, "-m", "aidlc", "guard", "pre-tool"]
-        return subprocess.run(cmd, input=payload, capture_output=True, text=True, env=env | extra)
+        return subprocess.run(
+            cmd, input=payload, capture_output=True, text=True, env=env | extra, encoding="utf-8", errors="replace"
+        )
 
     headless = hook()
     assert headless.returncode == 2 and "headless" in headless.stderr
@@ -108,7 +112,7 @@ def test_guard_hook_ask_tier(repo: Path, tmp_path: Path):
     permissions.decide(run_dir, req["id"], "deny")
     denied = hook(AIDLC_INTERACTIVE="1")
     assert denied.returncode == 2 and "denied by the developer" in denied.stderr
-    events = [json.loads(line)["event"] for line in (run_dir / "audit.jsonl").read_text().splitlines()]
+    events = [json.loads(line)["event"] for line in (run_dir / "audit.jsonl").read_text(encoding="utf-8").splitlines()]
     assert {"permission.requested", "permission.granted", "permission.used", "permission.denied"} <= set(events)
 
     sudo = json.dumps({"cwd": str(repo), "tool_name": "Bash", "tool_input": {"command": "sudo ls"}})
@@ -118,17 +122,19 @@ def test_guard_hook_ask_tier(repo: Path, tmp_path: Path):
         capture_output=True,
         text=True,
         env=env | {"AIDLC_INTERACTIVE": "1"},
+        encoding="utf-8",
+        errors="replace",
     )
     assert proc.returncode == 2 and len(permissions.load(run_dir)) == 1  # deny tier never asks
 
 
 def _reset_pending(run_dir: Path, rid: str) -> None:
     path = run_dir / "permissions.json"
-    items = json.loads(path.read_text())
+    items = json.loads(path.read_text(encoding="utf-8"))
     for item in items:
         if item["id"] == rid:
             item["status"] = "pending"
-    path.write_text(json.dumps(items))
+    path.write_text(json.dumps(items), encoding="utf-8")
 
 
 def test_guard_hook_noop_without_active_run(tmp_path: Path):
@@ -138,6 +144,8 @@ def test_guard_hook_noop_without_active_run(tmp_path: Path):
         capture_output=True,
         text=True,
         env={"PATH": "/usr/bin:/bin", "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")},
+        encoding="utf-8",
+        errors="replace",
     )
     assert proc.returncode == 0
 
@@ -152,13 +160,13 @@ def test_rate_updates_report(repo, requirement, monkeypatch):
     pipe.execute(state, paths, stages.select())
     monkeypatch.chdir(repo / "tests")
     assert cli.main(["rate", "5", "--run", state.run_id]) == 0
-    assert "Developer rating: 5/5" in paths.report_file.read_text()
+    assert "Developer rating: 5/5" in paths.report_file.read_text(encoding="utf-8")
 
 
 def test_marketplace_lists_root_plugin():
     root = Path(__file__).resolve().parents[2] / ".claude-plugin"
-    manifest = json.loads((root / "plugin.json").read_text())
-    marketplace = json.loads((root / "marketplace.json").read_text())
+    manifest = json.loads((root / "plugin.json").read_text(encoding="utf-8"))
+    marketplace = json.loads((root / "marketplace.json").read_text(encoding="utf-8"))
     assert marketplace["owner"]["name"]
     assert [(p["name"], p["source"]) for p in marketplace["plugins"]] == [(manifest["name"], "./")]
 
@@ -168,7 +176,27 @@ def test_commands_load_in_copilot_and_codex():
     commands = sorted((Path(__file__).resolve().parents[2] / "commands").glob("*.md"))
     assert commands
     for path in commands:
-        text = path.read_text()
+        text = path.read_text(encoding="utf-8")
         front = yaml.safe_load(text.split("---")[1])
         assert all(isinstance(v, str) for v in front.values()), path.name
         assert "$ARGUMENTS" not in text, path.name
+
+
+def test_plugin_hooks_are_shell_neutral():
+    hooks = json.loads((Path(__file__).resolve().parents[2] / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+    commands = [h["command"] for event in hooks["hooks"].values() for m in event for h in m["hooks"]]
+    assert commands and all(c.startswith("aidlc guard ") for c in commands)
+
+
+def test_container_args_posix_and_windows():
+    from aidlc.container import container_path, docker_args
+
+    assert container_path("C:\\src\\app", windows=True) == "/c/src/app"
+    assert container_path("/home/u/app", windows=False) == "/home/u/app"
+    common = {"image": "img", "network": "net", "env": {"GH_TOKEN": "x", "AWS_SECRET_ACCESS_KEY": "y"}, "tty": False}
+    posix = docker_args("/r", "/r/.git", ["run", "x.md"], windows=False, user="1:1", **common)
+    assert posix[-3:] == ["img", "run", "x.md"] and "--user" in posix and "GH_TOKEN" in posix
+    assert "AWS_SECRET_ACCESS_KEY" not in posix and posix.count("--mount") == 1
+    win = docker_args("C:\\r", "D:\\main\\.git", ["run"], windows=True, user=None, **common)
+    assert "type=bind,source=C:\\r,target=/c/r" in win and "type=bind,source=D:\\main\\.git,target=/d/main/.git" in win
+    assert "--user" not in win and win[win.index("-w") + 1] == "/c/r"

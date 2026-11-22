@@ -28,7 +28,7 @@ class Requirement:
 
 
 def from_file(path: Path) -> Requirement:
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     meta: dict = {}
     if text.startswith("---"):
         end = text.find("\n---", 3)
@@ -107,5 +107,5 @@ def write_requirement(req: Requirement, aidlc_dir: Path) -> Path:
     if body.startswith("---"):
         end = body.find("\n---", 3)
         body = body[end + 4 :].lstrip() if end != -1 else body
-    path.write_text(f"---\n{front}---\n\n{body}")
+    path.write_text(f"---\n{front}---\n\n{body}", encoding="utf-8")
     return path

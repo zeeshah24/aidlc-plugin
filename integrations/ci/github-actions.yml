@@ -27,7 +27,7 @@ jobs:
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
           TICKET: ${{ inputs.ticket }}
           # GitHub-hosted runners are single-use VMs: the isolated runtime writing stages require.
-          # On self-hosted runners use scripts/aidlc-container.sh instead.
+          # On self-hosted runners use `aidlc container run ...` instead.
           AIDLC_ISOLATED: "1"
         # --approve records explicit CI approval of the default human gates; drop it to stop at them.
         run: aidlc run "$TICKET" --headless --approve analyze,plan

@@ -17,7 +17,7 @@ See [docs/DESIGN.md](docs/DESIGN.md) for the full design.
 ## Quick start
 
 ```bash
-scripts/install.sh                 # installs the aidlc CLI (pipx, or pip --user)
+scripts/install.sh                 # installs the aidlc CLI (pipx, or pip --user); Windows: scripts\install.ps1
 cd /path/to/your/repo
 aidlc init                         # .aidlc/ + aidlc.yaml (--org <path|git-url> pulls enterprise standards)
 aidlc doctor                       # check tools and model routing
@@ -32,7 +32,7 @@ CI: `aidlc run PROJ-123 --headless --approve analyze,plan` (see `integrations/ci
 
 This repository is a plugin marketplace (`.claude-plugin/marketplace.json`) that Claude Code, GitHub Copilot CLI
 and Codex CLI all read. The plugin adds the `aidlc-*` commands, agents and guardrail hooks; it calls the `aidlc`
-CLI, so install that first (`scripts/install.sh`).
+CLI, so install that first (`scripts/install.sh`, or `scripts\install.ps1` on Windows).
 
 | Assistant | Install | Use |
 |---|---|---|
@@ -47,6 +47,24 @@ instruction files in `integrations/` (`copilot/copilot-instructions.md`, `codex/
 
 Whichever assistant starts the run, `aidlc` routes stage work to the providers in `models.yaml` (Claude Code or
 Codex CLI), so their CLIs and API keys are still required.
+
+### macOS and Windows
+
+The plugin, the `aidlc` CLI and the container work the same on macOS, Linux and Windows (CI runs on all three).
+
+| | macOS | Windows (PowerShell) |
+|---|---|---|
+| Prerequisites | `brew install python@3.12 pipx node git gh` | `winget install Python.Python.3.12 Git.Git OpenJS.NodeJS.LTS GitHub.cli` then `py -m pip install --user pipx` and `py -m pipx ensurepath` |
+| `aidlc` CLI | `pipx install "git+https://github.com/zeeshah24/aidlc-plugin#subdirectory=orchestrator"` | same command |
+| Agent CLIs | `npm install -g @anthropic-ai/claude-code` (and/or `@openai/codex`) | same command |
+| Container (`test`, `implement`) | Docker Desktop, then `aidlc container run requirements/x.md` | Docker Desktop (WSL 2 backend), then `aidlc container run requirements/x.md` |
+
+Notes for Windows:
+- Claude Code runs its Bash tool and hooks in Git Bash; the guardrail hook is the plain command `aidlc guard`, so it
+  also works when Claude falls back to PowerShell, and the guard checks the `PowerShell` tool like `Bash`.
+- `stack.test_command` and the other project commands run in `cmd.exe` when `aidlc` runs natively, so keep them
+  portable (`python -m pytest`, `npm test`); inside `aidlc container` they run in Linux.
+- WSL 2 also works: install everything inside the Linux distribution and follow the macOS/Linux column.
 
 Each run works on its own branch in `.aidlc/worktrees/<run-id>/`. It writes artifacts to `.aidlc/runs/<run-id>/`
 and a cost/time report to `.aidlc/reports/<run-id>.md`.
@@ -72,7 +90,7 @@ does, and allowed runners (`pytest`, `npm run`, `make test`) execute code the ag
 `implement` require an isolated runtime by default (`harness.require_isolation`; an org can make it mandatory):
 
 ```bash
-scripts/aidlc-container.sh run requirements/x.md   # builds integrations/container/Dockerfile on first use
+aidlc container run requirements/x.md   # builds integrations/container/Dockerfile on first use
 ```
 
 The container mounts only the repository, runs as your uid with no capabilities and a read-only root, and
@@ -88,9 +106,6 @@ Other controls:
 - Requirement text, artifacts and diffs reach agents fenced as data; `VERDICT:` lines inside them are removed.
 - `pipeline.max_cost_usd` / `max_tokens` stop a run that overspends; `verify` fails while an `AC-` ID has no test.
 - `aidlc doctor` checks config keys, plugin/CLI versions, isolation and each provider's capabilities.
-
-Windows: run agents in the container (WSL2/Docker Desktop). Natively, permission files are not locked across
-processes and the hook script needs `sh`.
 
 ## Telemetry and outcomes
 

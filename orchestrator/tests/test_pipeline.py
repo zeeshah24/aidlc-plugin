@@ -49,7 +49,7 @@ class Script:
 def write(req: AgentRequest, rel: str, text: str) -> str:
     path = req.workdir / rel
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
+    path.write_text(text, encoding="utf-8")
     return f"wrote {rel}"
 
 
@@ -77,9 +77,9 @@ def test_full_run_end_to_end(repo: Path, requirement: Path):
     }
     for name in ("spec", "plan", "test_lock", "verification", "review", "scan", "stack_profile"):
         assert paths.artifact(name).exists(), name
-    lock = json.loads(paths.artifact("test_lock").read_text())
+    lock = json.loads(paths.artifact("test_lock").read_text(encoding="utf-8"))
     assert list(lock["files"]) == ["tests/test_calc.py"] and lock["red_exit_code"] != 0
-    report = paths.report_file.read_text()
+    report = paths.report_file.read_text(encoding="utf-8")
     assert "fake:fake-reason" in report and "$" in report
     assert state.stages["analyze"].cost_usd > 0
     impl = next(c for c in fake.calls if c.stage == "implement")
@@ -89,7 +89,7 @@ def test_full_run_end_to_end(repo: Path, requirement: Path):
     # work happened on an isolated branch, not on main
     assert state.branch.startswith("aidlc/") and Path(state.workdir) != repo
     assert not (repo / "calc.py").exists() and (Path(state.workdir) / "calc.py").exists()
-    events = [json.loads(line)["event"] for line in paths.audit_file.read_text().splitlines()]
+    events = [json.loads(line)["event"] for line in paths.audit_file.read_text(encoding="utf-8").splitlines()]
     assert "run.start" in events and "agent.start" in events
 
 
@@ -126,7 +126,7 @@ def test_red_tests_must_fail_first(repo: Path, requirement: Path):
 def test_red_gate_flags_failing_baseline(repo: Path, requirement: Path):
     from conftest import commit
 
-    (repo / "tests" / "test_broken.py").write_text("def test_broken():\n    assert False\n")
+    (repo / "tests" / "test_broken.py").write_text("def test_broken():\n    assert False\n", encoding="utf-8")
     commit(repo, "broken")
     pipe, fake = pipeline(repo, Script())
     state, paths = pipe.start(intake.from_file(requirement))
@@ -154,15 +154,15 @@ def test_locked_tests_restored_after_implementer_edits(repo: Path, requirement: 
     pipe, _ = pipeline(repo, Script(implement=[cheat, lambda r: write(r, "calc.py", IMPL)]))
     state, paths = pipe.start(intake.from_file(requirement))
     assert pipe.execute(state, paths, stages.select(end="implement")) == "completed"
-    assert (Path(state.workdir) / "tests" / "test_calc.py").read_text() == TEST
+    assert (Path(state.workdir) / "tests" / "test_calc.py").read_text(encoding="utf-8") == TEST
     assert any("restored" in n for n in state.stages["implement"].notes)
 
 
 def test_human_gate_pauses_and_resumes(repo: Path, requirement: Path):
     cfg_file = repo / "aidlc.yaml"
-    cfg = yaml.safe_load(cfg_file.read_text())
+    cfg = yaml.safe_load(cfg_file.read_text(encoding="utf-8"))
     cfg["pipeline"]["human_gates"] = ["analyze"]
-    cfg_file.write_text(yaml.safe_dump(cfg))
+    cfg_file.write_text(yaml.safe_dump(cfg), encoding="utf-8")
     pipe, _ = pipeline(repo, Script(), headless=True)
     state, paths = pipe.start(intake.from_file(requirement))
     assert pipe.execute(state, paths, stages.select()) == "awaiting_approval"
@@ -187,14 +187,14 @@ def test_missing_prerequisite_fails_fast(repo: Path):
 
 
 def test_in_place_writes_refuse_dirty_checkout(repo: Path):
-    (repo / "wip.py").write_text("x = 1\n")
+    (repo / "wip.py").write_text("x = 1\n", encoding="utf-8")
     pipe, fake = pipeline(repo, Script())
     state, paths = pipe.start_adhoc()
     with pytest.raises(PipelineError, match="uncommitted"):
         pipe.execute(state, paths, stages.select(stage="implement"))
     assert (repo / "wip.py").exists() and not fake.calls
     state.owned_paths = pipe.dirty_hashes()
-    (repo / "wip.py").write_text("x = 2\n")
+    (repo / "wip.py").write_text("x = 2\n", encoding="utf-8")
     with pytest.raises(PipelineError, match="uncommitted"):
         pipe.execute(state, paths, stages.select(stage="implement"))
     state.stage("implement").status = "passed"
@@ -230,7 +230,7 @@ def test_permission_request_pauses_then_resumes(repo: Path, requirement: Path):
     [req] = permissions.pending(paths.run_dir, "implement")
     permissions.decide(paths.run_dir, req["id"], "run")
     assert pipe.execute(state, paths, stages.select(), skip_passed=True) == "completed", state.history
-    report = paths.report_file.read_text()
+    report = paths.report_file.read_text(encoding="utf-8")
     assert "## Guardrail approvals" in report and "allowed_run" in report and "make gen" in report
 
 
@@ -302,7 +302,9 @@ def test_existing_unchanged_tests_count_for_coverage_gate(repo: Path, requiremen
     from conftest import commit
 
     (repo / "tests").mkdir(exist_ok=True)
-    (repo / "tests" / "test_existing.py").write_text("def test_existing():  # AC-1\n    assert True\n")
+    (repo / "tests" / "test_existing.py").write_text(
+        "def test_existing():  # AC-1\n    assert True\n", encoding="utf-8"
+    )
     commit(repo, "existing test")
     untested = "from calc import add\n\n\ndef test_add():  # REQ-1\n    assert add(2, 3) == 5\n"
     pipe, _ = pipeline(repo, Script(test=[lambda r: write(r, "tests/test_calc.py", untested)]))

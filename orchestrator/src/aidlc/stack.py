@@ -29,8 +29,8 @@ def detect(root: Path, overrides: dict | None = None) -> dict:
     if _exists(root, "pyproject.toml", "setup.py", "setup.cfg", "requirements.txt") or _glob_any(root, "*.py"):
         profile["languages"].append("python")
         profile["ecosystems"].append("PyPI")
-        text = (root / "pyproject.toml").read_text() if (root / "pyproject.toml").exists() else ""
-        reqs = (root / "requirements.txt").read_text() if (root / "requirements.txt").exists() else ""
+        text = (root / "pyproject.toml").read_text(encoding="utf-8") if (root / "pyproject.toml").exists() else ""
+        reqs = (root / "requirements.txt").read_text(encoding="utf-8") if (root / "requirements.txt").exists() else ""
         if "poetry" in text:
             profile["package_managers"].append("poetry")
         elif (root / "uv.lock").exists():
@@ -50,7 +50,7 @@ def detect(root: Path, overrides: dict | None = None) -> dict:
             "**/conftest.py",
         ]
     if (root / "package.json").exists():
-        pkg = json.loads((root / "package.json").read_text())
+        pkg = json.loads((root / "package.json").read_text(encoding="utf-8"))
         deps = {**pkg.get("dependencies", {}), **pkg.get("devDependencies", {})}
         profile["languages"].append(
             "typescript" if "typescript" in deps or (root / "tsconfig.json").exists() else "javascript"

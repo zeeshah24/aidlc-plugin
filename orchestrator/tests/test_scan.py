@@ -17,31 +17,31 @@ BRANCHY = "def {}(x):\n" + "".join(f"    if x == {i}:\n        return {i}\n" for
 
 def test_builtin_analyzers(tmp_path: Path):
     (tmp_path / "pkg").mkdir()
-    (tmp_path / "pkg" / "__init__.py").write_text("")
-    (tmp_path / "pkg" / "a.py").write_text("from pkg import b\n")
-    (tmp_path / "pkg" / "b.py").write_text("import pkg.a\n")
-    (tmp_path / "c.py").write_text(BRANCHY.format("f"))
+    (tmp_path / "pkg" / "__init__.py").write_text("", encoding="utf-8")
+    (tmp_path / "pkg" / "a.py").write_text("from pkg import b\n", encoding="utf-8")
+    (tmp_path / "pkg" / "b.py").write_text("import pkg.a\n", encoding="utf-8")
+    (tmp_path / "c.py").write_text(BRANCHY.format("f"), encoding="utf-8")
     files = ["pkg/__init__.py", "pkg/a.py", "pkg/b.py", "c.py"]
     (tmp_path / "sib").mkdir()
-    (tmp_path / "sib" / "__init__.py").write_text("from sib.x import X\n")
-    (tmp_path / "sib" / "x.py").write_text("from . import y\nX = 1\n")
-    (tmp_path / "sib" / "y.py").write_text("")
+    (tmp_path / "sib" / "__init__.py").write_text("from sib.x import X\n", encoding="utf-8")
+    (tmp_path / "sib" / "x.py").write_text("from . import y\nX = 1\n", encoding="utf-8")
+    (tmp_path / "sib" / "y.py").write_text("", encoding="utf-8")
     assert scan.circular_imports(tmp_path, ["sib/__init__.py", "sib/x.py", "sib/y.py"]) == []
     (tmp_path / "ini").mkdir()
-    (tmp_path / "ini" / "__init__.py").write_text("import outer\n")
-    (tmp_path / "ini" / "sub.py").write_text("")
-    (tmp_path / "outer.py").write_text("import ini.sub\n")
+    (tmp_path / "ini" / "__init__.py").write_text("import outer\n", encoding="utf-8")
+    (tmp_path / "ini" / "sub.py").write_text("", encoding="utf-8")
+    (tmp_path / "outer.py").write_text("import ini.sub\n", encoding="utf-8")
     assert scan.circular_imports(tmp_path, ["ini/__init__.py", "ini/sub.py", "outer.py"])
     (tmp_path / "ini" / "__init__.py").write_text(
-        "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    import outer\n"
+        "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    import outer\n", encoding="utf-8"
     )
     assert scan.circular_imports(tmp_path, ["ini/__init__.py", "ini/sub.py", "outer.py"]) == []
     (tmp_path / "ini" / "__init__.py").write_text(
-        "import typing as t\nif t.TYPE_CHECKING and True:\n    import outer\n"
+        "import typing as t\nif t.TYPE_CHECKING and True:\n    import outer\n", encoding="utf-8"
     )
     assert scan.circular_imports(tmp_path, ["ini/__init__.py", "ini/sub.py", "outer.py"]) == []
     (tmp_path / "ini" / "__init__.py").write_text(
-        "from typing import TYPE_CHECKING\nif not TYPE_CHECKING:\n    import outer\n"
+        "from typing import TYPE_CHECKING\nif not TYPE_CHECKING:\n    import outer\n", encoding="utf-8"
     )
     assert scan.circular_imports(tmp_path, ["ini/__init__.py", "ini/sub.py", "outer.py"])
     assert [f.category for f in scan.circular_imports(tmp_path, files)] == ["circular_dependency"]
@@ -56,13 +56,13 @@ def test_builtin_analyzers(tmp_path: Path):
 def test_baseline_delta_gate(repo: Path, tmp_path: Path):
     block = "".join(f"    total += {i} * value\n" for i in range(6))
     fn = "def {}(value):\n    total = 0\n" + block + "    return total\n"
-    (repo / "old.py").write_text(fn.format("one") + "\n\n" + fn.format("two"))
+    (repo / "old.py").write_text(fn.format("one") + "\n\n" + fn.format("two"), encoding="utf-8")
     commit(repo, "legacy duplication")
     base = sh(["git", "rev-parse", "HEAD"], repo).strip()
     result = scan.gate(repo, repo, base, PROFILE, CFG, "", tmp_path / "cache")
     assert result["passed"] and result["baseline_count"] >= 1 and not result["new"]
 
-    (repo / "new.py").write_text(BRANCHY.format("g"))
+    (repo / "new.py").write_text(BRANCHY.format("g"), encoding="utf-8")
     commit(repo, "complex")
     result = scan.gate(repo, repo, base, PROFILE, CFG, "", tmp_path / "cache")
     assert not result["passed"]
@@ -82,7 +82,7 @@ def test_scan_reports_analyzers_that_ran_and_uncovered_languages(tmp_path: Path)
     from aidlc.scan import run_scanners
 
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
-    (tmp_path / "Main.java").write_text("class Main {}\n")
+    (tmp_path / "Main.java").write_text("class Main {}\n", encoding="utf-8")
     subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True)
     res = run_scanners(tmp_path, {"languages": ["java"], "test_globs": []}, {"analyzers": ["duplication"]})
     assert res.ran == ["builtin:duplication"]

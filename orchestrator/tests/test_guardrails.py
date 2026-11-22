@@ -47,7 +47,7 @@ def test_dependency_install_requires_plan_approval(rails, tmp_path: Path):
             {"name": "leftpad", "status": "rejected"},
         ]
     }
-    (run_dir / "dependencies.json").write_text(json.dumps(deps))
+    (run_dir / "dependencies.json").write_text(json.dumps(deps), encoding="utf-8")
     assert check_command("pip install requests==2.32.3", rails, run_dir).allowed
     assert check_command("npm install @scope/ui@1.0.0", rails, run_dir).allowed
     assert check_command("pip install requests@=2.32.3", rails, run_dir).allowed
@@ -64,7 +64,7 @@ def test_write_jail_protected_and_locked(rails, tmp_path: Path):
     run_dir = tmp_path / "run"
     jail.mkdir()
     run_dir.mkdir()
-    (run_dir / "test-lock.json").write_text(json.dumps({"files": {"tests/test_a.py": "x"}}))
+    (run_dir / "test-lock.json").write_text(json.dumps({"files": {"tests/test_a.py": "x"}}), encoding="utf-8")
     assert check_write("src/app.py", rails, jail, run_dir).allowed
     assert not check_write("../outside.py", rails, jail, run_dir).allowed
     assert not check_write(str(tmp_path / "x.py"), rails, jail, run_dir).allowed
@@ -121,7 +121,7 @@ def test_agent_settings_deny_secret_reads(repo: Path, tmp_path: Path):
 
     paths = RunPaths(repo, tmp_path / "run", repo)
     paths.run_dir.mkdir()
-    settings = json.loads(hook_settings(paths, load_config(repo).guardrails).read_text())
+    settings = json.loads(hook_settings(paths, load_config(repo).guardrails).read_text(encoding="utf-8"))
     deny = settings["permissions"]["deny"]
     assert "Read(**/.env)" in deny and "Read(**/*.pem)" in deny and "Edit(.github/workflows/**)" in deny
 
@@ -164,7 +164,7 @@ def test_hook_uses_guardrails_frozen_at_run_start(tmp_path):
     from aidlc.harness import run_guardrails
 
     assert run_guardrails(tmp_path, {"live": True}) == {"live": True}
-    (tmp_path / "guardrails.json").write_text('{"frozen": true}')
+    (tmp_path / "guardrails.json").write_text('{"frozen": true}', encoding="utf-8")
     assert run_guardrails(tmp_path, {"live": True}) == {"frozen": True}
 
 
@@ -173,3 +173,31 @@ def test_trusted_config_is_protected(rails, tmp_path):
 
     assert not check_write(str(tmp_path / "aidlc.yaml"), rails, tmp_path).allowed
     assert not check_write(str(tmp_path / "CONVENTIONS.md"), rails, tmp_path).allowed
+
+
+def test_powershell_tool_is_guarded_like_bash(rails, repo: Path):
+    assert not evaluate("PowerShell", {"command": "Invoke-WebRequest https://x"}, rails, repo, None).allowed
+    assert not evaluate("PowerShell", {"command": "type .env"}, rails, repo, None).allowed
+    assert evaluate("PowerShell", {"command": "git status"}, rails, repo, None).allowed
+
+
+@pytest.mark.parametrize("command", ["iwr https://x", "Remove-Item -Recurse src", "ls > C:\\x", "cmd /c del x"])
+def test_windows_commands_denied(rails, command):
+    assert not check_command(command, rails).allowed
+
+
+def test_case_insensitive_file_systems_cannot_dodge_path_rules(rails, repo: Path, monkeypatch):
+    from aidlc import guardrails
+
+    monkeypatch.setattr(guardrails, "CASE_INSENSITIVE_FS", True)
+    assert not check_write(".GitHub/Workflows/ci.yml", rails, repo).allowed
+    assert not guardrails.check_read("Config/.ENV", rails, repo).allowed
+    assert check_write("src/App.py", rails, repo).allowed
+
+
+def test_hook_command_quoting_per_platform():
+    from aidlc.harness import hook_executable
+
+    assert hook_executable("/usr/bin/python3", windows=False) == "/usr/bin/python3"
+    assert hook_executable("C:\\Python312\\python.exe", windows=True) == "C:/Python312/python.exe"
+    assert hook_executable("C:\\Program Files\\Py\\python.exe", windows=True) == '"C:/Program Files/Py/python.exe"'

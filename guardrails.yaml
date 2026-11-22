@@ -86,6 +86,25 @@ commands:
     - "*-exec*"
     - "*-delete*"
     - "*.env*"
+    # Windows (PowerShell/cmd) equivalents
+    - "*Invoke-WebRequest*"
+    - "*Invoke-RestMethod*"
+    - "*iwr *"
+    - "*irm *"
+    - "*Invoke-Expression*"
+    - "*iex *"
+    - "*Start-Process*"
+    - "*Remove-Item*-Recurse*"
+    - "*rmdir /s*"
+    - "*del /s*"
+    - "*env:*"
+    - "*powershell *"
+    - "*pwsh *"
+    - "*cmd /c*"
+    - "*cmd.exe*"
+    - "*> [A-Za-z]:*"
+    - "*>[A-Za-z]:*"
+    - "*> \\\\*"
 tools:
   allow: []               # network/MCP tools agents may use, e.g. ["mcp__atlassian__getJiraIssue"]; others are denied
 paths:
@@ -134,4 +153,7 @@ env:
   # Scoped tokens: only these variables reach agent and test subprocesses.
   passthrough: [PATH, HOME, USER, LANG, LC_ALL, TERM, TMPDIR, SHELL, VIRTUAL_ENV, PYTHONPATH, JAVA_HOME,
                 GOPATH, GOROOT, GOCACHE, NODE_PATH, ANTHROPIC_API_KEY, CLAUDE_CODE_USE_BEDROCK,
-                CLAUDE_CODE_USE_VERTEX, AWS_REGION, AWS_PROFILE, OPENAI_API_KEY, CODEX_HOME]
+                CLAUDE_CODE_USE_VERTEX, AWS_REGION, AWS_PROFILE, OPENAI_API_KEY, CODEX_HOME,
+                # Windows: processes fail to start without these
+                SYSTEMROOT, WINDIR, COMSPEC, PATHEXT, TEMP, TMP, USERPROFILE, APPDATA, LOCALAPPDATA, PROGRAMDATA,
+                PROGRAMFILES, HOMEDRIVE, HOMEPATH, USERNAME, CLAUDE_CODE_GIT_BASH_PATH]

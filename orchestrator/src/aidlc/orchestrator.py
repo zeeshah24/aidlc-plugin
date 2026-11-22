@@ -60,7 +60,7 @@ class Pipeline:
 
     def current_run_id(self) -> str | None:
         marker = self.cfg.aidlc_dir / "current"
-        return marker.read_text().strip() if marker.exists() else None
+        return marker.read_text(encoding="utf-8").strip() if marker.exists() else None
 
     def _base(self) -> tuple[str, str]:
         root = self.cfg.root
@@ -83,10 +83,10 @@ class Pipeline:
         paths = RunPaths(root, self.runs_dir / run_id, workdir)
         paths.run_dir.mkdir(parents=True, exist_ok=True)
         intake.write_requirement(req, self.cfg.aidlc_dir)
-        paths.artifact("requirement").write_text(req.body)
+        paths.artifact("requirement").write_text(req.body, encoding="utf-8")
         state.save(paths.run_dir)
         harness.snapshot_guardrails(self.cfg, paths)
-        (self.cfg.aidlc_dir / "current").write_text(run_id)
+        (self.cfg.aidlc_dir / "current").write_text(run_id, encoding="utf-8")
         AuditLog(paths.audit_file).log(
             "run.start", run_id=run_id, source=req.source, branch=branch, worktree=use_worktree
         )
@@ -103,7 +103,7 @@ class Pipeline:
         paths = RunPaths(root, self.runs_dir / run_id, root)
         state.save(paths.run_dir)
         harness.snapshot_guardrails(self.cfg, paths)
-        (self.cfg.aidlc_dir / "current").write_text(run_id)
+        (self.cfg.aidlc_dir / "current").write_text(run_id, encoding="utf-8")
         return state, paths
 
     def open(self, run_id: str) -> tuple[RunState, RunPaths]:
@@ -314,12 +314,12 @@ def record_approval(state: RunState, paths: RunPaths, stage: str, explicit: bool
     if stage not in state.approvals:
         state.approvals.append(stage)
     if stage == "plan" and explicit and paths.artifact("dependencies").exists():
-        data = json.loads(paths.artifact("dependencies").read_text())
+        data = json.loads(paths.artifact("dependencies").read_text(encoding="utf-8"))
         for dep in data.get("dependencies", []):
             if dep["status"] == "needs_review":
                 dep["status"] = "approved"
                 dep["notes"].append("approved by human at plan gate")
-        paths.artifact("dependencies").write_text(json.dumps(data, indent=2) + "\n")
+        paths.artifact("dependencies").write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     state.event(stage, "approved", "explicit" if explicit else "auto (--yes)")
     AuditLog(paths.audit_file).log("gate.approved", stage=stage, explicit=explicit)
 

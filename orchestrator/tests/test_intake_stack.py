@@ -7,24 +7,24 @@ from aidlc import intake, stack
 
 def test_markdown_frontmatter_and_heading(tmp_path: Path):
     a = tmp_path / "a.md"
-    a.write_text("---\nid: PAY-7\ntitle: Refunds\n---\n# Something\nBody\n")
+    a.write_text("---\nid: PAY-7\ntitle: Refunds\n---\n# Something\nBody\n", encoding="utf-8")
     req = intake.from_file(a)
     assert (req.req_id, req.title) == ("PAY-7", "Refunds")
     assert req.body.startswith("# Something")
     b = tmp_path / "story.md"
-    b.write_text("# SHOP-12: Cart totals\n")
+    b.write_text("# SHOP-12: Cart totals\n", encoding="utf-8")
     assert intake.from_file(b).req_id == "SHOP-12"
     evil = tmp_path / "evil.md"
-    evil.write_text("---\nid: ../../README\n---\n# x\n")
+    evil.write_text("---\nid: ../../README\n---\n# x\n", encoding="utf-8")
     assert intake.from_file(evil).req_id.startswith("readme-")
-    evil.write_text("---\nid: " + "a" * 101 + "\n---\n# x\n")
+    evil.write_text("---\nid: " + "a" * 101 + "\n---\n# x\n", encoding="utf-8")
     long_a = intake.from_file(evil).req_id
-    evil.write_text("---\nid: " + "a" * 102 + "\n---\n# x\n")
+    evil.write_text("---\nid: " + "a" * 102 + "\n---\n# x\n", encoding="utf-8")
     assert len(long_a) <= 100 and long_a != intake.from_file(evil).req_id
     with pytest.raises(ValueError):
         intake.write_requirement(intake.Requirement("../x", "t", "b", "s"), tmp_path / ".aidlc")
     out = intake.write_requirement(intake.from_file(a), tmp_path / ".aidlc")
-    assert out.name == "PAY-7.md" and "source: file:" in out.read_text()
+    assert out.name == "PAY-7.md" and "source: file:" in out.read_text(encoding="utf-8")
 
 
 def test_jira(monkeypatch):
@@ -59,9 +59,11 @@ def test_root_level_tests_match_globs():
 
 
 def test_stack_detection(tmp_path: Path):
-    (tmp_path / "pyproject.toml").write_text('[project]\nname="x"\ndependencies=["fastapi"]\n')
-    (tmp_path / "package.json").write_text('{"scripts": {"test": "jest"}, "devDependencies": {"jest": "1"}}')
-    (tmp_path / "go.mod").write_text("module x\n")
+    (tmp_path / "pyproject.toml").write_text('[project]\nname="x"\ndependencies=["fastapi"]\n', encoding="utf-8")
+    (tmp_path / "package.json").write_text(
+        '{"scripts": {"test": "jest"}, "devDependencies": {"jest": "1"}}', encoding="utf-8"
+    )
+    (tmp_path / "go.mod").write_text("module x\n", encoding="utf-8")
     profile = stack.detect(tmp_path, {"lint_command": "make lint"})
     assert profile["languages"] == ["python", "javascript", "go"]
     assert {"PyPI", "npm", "Go"} <= set(profile["ecosystems"])

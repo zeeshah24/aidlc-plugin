@@ -2,14 +2,14 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob|WebFetch|WebSearch|mcp__.*",
-        "hooks": [{"type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc-guard.sh pre-tool"}]
+        "matcher": "Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob|WebFetch|WebSearch|mcp__.*",
+        "hooks": [{"type": "command", "command": "aidlc guard pre-tool"}]
       }
     ],
     "PostToolUse": [
       {
-        "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit",
-        "hooks": [{"type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc-guard.sh post-tool"}]
+        "matcher": "Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [{"type": "command", "command": "aidlc guard post-tool"}]
       }
     ]
   }

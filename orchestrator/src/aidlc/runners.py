@@ -50,13 +50,13 @@ class StageContext:
 
     def read(self, key: str) -> str:
         path = self.paths.artifact(key)
-        return path.read_text() if path.exists() else ""
+        return path.read_text(encoding="utf-8") if path.exists() else ""
 
     def profile(self) -> dict:
         path = self.paths.artifact("stack_profile")
         if not path.exists():
             write_stack_profile(self)
-        return json.loads(path.read_text())
+        return json.loads(path.read_text(encoding="utf-8"))
 
     def id_pattern(self) -> str:
         return self.cfg.get("requirements.id_pattern", r"\b(?:REQ|AC|NFR)-\d+\b")
@@ -90,7 +90,7 @@ def call_agent(ctx: StageContext, stage: str, prompt: str, writable: bool) -> Ag
     )
     (ctx.paths.run_dir / "prompts").mkdir(exist_ok=True)
     rec = ctx.state.stage(stage)
-    (ctx.paths.run_dir / "prompts" / f"{stage}-{rec.attempts + 1}.md").write_text(prompt)
+    (ctx.paths.run_dir / "prompts" / f"{stage}-{rec.attempts + 1}.md").write_text(prompt, encoding="utf-8")
     ctx.audit.log("agent.start", stage=stage, provider=choice.provider, model=choice.model, writable=writable)
     try:
         result = adapter.run(req)
@@ -194,7 +194,7 @@ def file_block(ctx: StageContext, rels: list[str], max_chars: int = 20000) -> st
     for rel in rels:
         path = ctx.workdir / rel
         if path.is_file():
-            out.append(f"### {rel}\n```\n{head(path.read_text(errors='ignore'), 6000)}\n```")
+            out.append(f"### {rel}\n```\n{head(path.read_text(errors='ignore', encoding='utf-8'), 6000)}\n```")
     return head("\n\n".join(out), max_chars)
 
 
@@ -215,7 +215,7 @@ def with_retries(ctx: StageContext, stage: str, attempt_fn: Callable[[list[str]]
 
 def write_stack_profile(ctx: StageContext) -> dict:
     profile = stack.detect(ctx.workdir, ctx.cfg.get("stack", {}) or {})
-    ctx.paths.artifact("stack_profile").write_text(json.dumps(profile, indent=2) + "\n")
+    ctx.paths.artifact("stack_profile").write_text(json.dumps(profile, indent=2) + "\n", encoding="utf-8")
     return profile
 
 
@@ -250,7 +250,7 @@ def run_analyze(ctx: StageContext) -> Outcome:
                 "spec has no requirement IDs",
                 ["Every requirement and acceptance criterion needs an ID like REQ-1 / AC-1."],
             )
-        ctx.paths.artifact("spec").write_text(spec)
+        ctx.paths.artifact("spec").write_text(spec, encoding="utf-8")
         questions = bullets(section(spec, "Open Questions"))
         note = f"{len(ids)} IDs; {len(questions)} open question(s)"
         return Outcome("passed", note, gate="open-questions" if questions else "ok")
@@ -282,8 +282,12 @@ def run_plan(ctx: StageContext) -> Outcome:
             return Outcome("retry", str(exc), [f"Fix the aidlc-dependencies block: {exc}"])
         offline = bool(ctx.cfg.get("dependencies.offline", False))
         results = deps.evaluate(proposals, ctx.cfg.guardrails, profile.get("ecosystems", []), offline=offline)
-        ctx.paths.artifact("plan").write_text(plan + "\n## Dependency gate (generated)\n\n" + deps.render(results))
-        ctx.paths.artifact("dependencies").write_text(json.dumps({"dependencies": results}, indent=2) + "\n")
+        ctx.paths.artifact("plan").write_text(
+            plan + "\n## Dependency gate (generated)\n\n" + deps.render(results), encoding="utf-8"
+        )
+        ctx.paths.artifact("dependencies").write_text(
+            json.dumps({"dependencies": results}, indent=2) + "\n", encoding="utf-8"
+        )
         rejected = [r for r in results if r["status"] == "rejected"]
         if rejected:
             return Outcome(
@@ -310,7 +314,7 @@ def run_test(ctx: StageContext) -> Outcome:
     globs = profile.get("test_globs", [])
     ids = traceability.requirement_ids(ctx.read("spec"), ctx.id_pattern())
     lock_path = ctx.paths.artifact("test_lock")
-    previous = json.loads(lock_path.read_text()).get("files", {}) if lock_path.exists() else {}
+    previous = json.loads(lock_path.read_text(encoding="utf-8")).get("files", {}) if lock_path.exists() else {}
     # On a rerun HEAD already contains the earlier red tests, so a clean baseline cannot be measured.
     baseline_red = bool(previous)
     if not previous:
@@ -376,7 +380,7 @@ def run_test(ctx: StageContext) -> Outcome:
                 **{p: sha256_file(ctx.workdir / p) for p in sorted(changed) if (ctx.workdir / p).is_file()},
             },
         }
-        ctx.paths.artifact("test_lock").write_text(json.dumps(lock, indent=2) + "\n")
+        ctx.paths.artifact("test_lock").write_text(json.dumps(lock, indent=2) + "\n", encoding="utf-8")
         missing = [i for i in ids if i not in covered]
         detail = f"{len(lock['files'])} test file(s) locked; red exit {code}"
         if missing:
@@ -396,7 +400,7 @@ def lock_violations(ctx: StageContext) -> list[str]:
     path = ctx.paths.artifact("test_lock")
     if not path.exists():
         return []
-    files = json.loads(path.read_text())["files"]
+    files = json.loads(path.read_text(encoding="utf-8"))["files"]
     return [
         p for p, digest in files.items() if not (ctx.workdir / p).is_file() or sha256_file(ctx.workdir / p) != digest
     ]
@@ -448,7 +452,9 @@ def run_implement(ctx: StageContext) -> Outcome:
         loop = ctx.state.loops
         msg = f"feat({ctx.state.req_id}): implement{f' (loop {loop})' if loop else ''} [aidlc]"
         sha = gitutil.commit_all(ctx.workdir, f"{msg}\n\n{trailer(ctx)}", name, email) or gitutil.head_sha(ctx.workdir)
-        ctx.paths.artifact("implementation").write_text(json.dumps({"commit": sha, "loop": loop}, indent=2) + "\n")
+        ctx.paths.artifact("implementation").write_text(
+            json.dumps({"commit": sha, "loop": loop}, indent=2) + "\n", encoding="utf-8"
+        )
         ctx.state.feedback = []
         return Outcome(
             "passed",
@@ -478,7 +484,7 @@ def run_verify(ctx: StageContext) -> Outcome:
         traceability.references(ctx.workdir, code, ctx.id_pattern()),
     )
     table = traceability.render(matrix)
-    (ctx.paths.run_dir / "traceability.json").write_text(json.dumps(matrix, indent=2) + "\n")
+    (ctx.paths.run_dir / "traceability.json").write_text(json.dumps(matrix, indent=2) + "\n", encoding="utf-8")
 
     def attempt(feedback: list[str]) -> Outcome:
         prompt = prompts.build(
@@ -497,7 +503,9 @@ def run_verify(ctx: StageContext) -> Outcome:
         result = verdict(text, ("PASS", "GAPS"))
         if result is None:
             return Outcome("retry", "no verdict", ["End with a line `VERDICT: PASS` or `VERDICT: GAPS`."])
-        ctx.paths.artifact("verification").write_text(text + "\n## Traceability matrix (generated)\n\n" + table)
+        ctx.paths.artifact("verification").write_text(
+            text + "\n## Traceability matrix (generated)\n\n" + table, encoding="utf-8"
+        )
         if matrix["untested"]:
             ctx.state.stage("verify").notes.append(f"untested IDs: {', '.join(matrix['untested'])}")
         gaps = bullets(section(text, "Gaps")) if result == "GAPS" else []
@@ -539,7 +547,7 @@ def run_review(ctx: StageContext) -> Outcome:
         result = verdict(text, ("APPROVE", "REQUEST_CHANGES"))
         if result is None:
             return Outcome("retry", "no verdict", ["End with `VERDICT: APPROVE` or `VERDICT: REQUEST_CHANGES`."])
-        ctx.paths.artifact("review").write_text(text)
+        ctx.paths.artifact("review").write_text(text, encoding="utf-8")
         if result == "REQUEST_CHANGES":
             blockers = bullets(section(text, "Blockers")) or ["Reviewer requested changes; see review.md"]
             return Outcome("route_back", f"{len(blockers)} blocker(s)", blockers, gate="changes-requested")
@@ -562,8 +570,8 @@ def run_scan(ctx: StageContext) -> Outcome:
         ctx.read("plan"),
         ctx.paths.root / ".aidlc" / "cache",
     )
-    ctx.paths.artifact("scan").write_text(json.dumps(result, indent=2) + "\n")
-    (ctx.paths.run_dir / "scan.md").write_text(scan.render(result))
+    ctx.paths.artifact("scan").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    (ctx.paths.run_dir / "scan.md").write_text(scan.render(result), encoding="utf-8")
     detail = f"{len(result['new'])} new, {len(result['blocking'])} blocking"
     if not result["passed"]:
         fb = [f"[{f['severity']}] {f['category']} {f['file']}: {f['message']}" for f in result["blocking"]]
@@ -580,7 +588,9 @@ def trailer(ctx: StageContext) -> str:
 
 def pr_body(ctx: StageContext) -> str:
     spec, ver, rev = ctx.read("spec"), ctx.read("verification"), ctx.read("review")
-    scan_md = (ctx.paths.run_dir / "scan.md").read_text() if (ctx.paths.run_dir / "scan.md").exists() else ""
+    scan_md = (
+        (ctx.paths.run_dir / "scan.md").read_text(encoding="utf-8") if (ctx.paths.run_dir / "scan.md").exists() else ""
+    )
     parts = [f"## {ctx.state.req_id}: {ctx.state.title}", "", f"Source: `{ctx.state.source}`", ""]
     key, base = intake.jira_key(ctx.state.source), intake.jira_base(ctx.cfg.get("jira", {}) or {})
     if key and base:
@@ -618,7 +628,7 @@ def jira_writeback(ctx: StageContext, url: str) -> None:
 
 def run_pr(ctx: StageContext) -> Outcome:
     body_file = ctx.paths.run_dir / "pr-body.md"
-    body_file.write_text(pr_body(ctx))
+    body_file.write_text(pr_body(ctx), encoding="utf-8")
     pr_cfg = ctx.cfg.get("pr", {}) or {}
     if not pr_cfg.get("enabled", True):
         return Outcome("skipped", f"PR disabled; body written to {body_file.name}")
@@ -626,7 +636,14 @@ def run_pr(ctx: StageContext) -> Outcome:
     if "origin" not in remotes or not shutil.which("gh"):
         return Outcome("skipped", f"no origin remote or gh CLI; body written to {body_file.name}")
     branch = ctx.state.branch
-    push = subprocess.run(["git", "push", "-u", "origin", branch], cwd=ctx.workdir, capture_output=True, text=True)
+    push = subprocess.run(
+        ["git", "push", "-u", "origin", branch],
+        cwd=ctx.workdir,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
     ctx.audit.log("command.run", command=f"git push -u origin {branch}", exit=push.returncode)
     if push.returncode != 0:
         return Outcome("failed", f"push failed: {push.stderr.strip()[-500:]}")
@@ -659,7 +676,7 @@ def run_pr(ctx: StageContext) -> Outcome:
             ["label", "create", label, "--color", "5319e7", "--description", "Opened by AI-DLC", "--force"], ctx.workdir
         )
         github.gh(["pr", "edit", existing["url"], "--add-label", label], ctx.workdir)
-    ctx.paths.artifact("pr").write_text(json.dumps(existing, indent=2) + "\n")
+    ctx.paths.artifact("pr").write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
     wait = int(pr_cfg.get("wait_for_checks_s", 0))
     if wait <= 0:
         return Outcome("passed", existing["url"], gate="opened")

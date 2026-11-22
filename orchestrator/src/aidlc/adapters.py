@@ -71,13 +71,13 @@ class ClaudeCodeAdapter:
             ",".join(tools),
         ]
         if not req.writable:
-            cmd += ["--disallowedTools", "Write,Edit,MultiEdit,Bash,NotebookEdit"]
+            cmd += ["--disallowedTools", "Write,Edit,MultiEdit,Bash,PowerShell,NotebookEdit"]
         else:
             cmd += ["--permission-mode", "acceptEdits"]
         if req.settings_file:
             # only the run's MCP config (none by default), not the developer's servers
             mcp = req.settings_file.with_name("agent-mcp.json")
-            mcp.write_text('{"mcpServers": {}}\n')
+            mcp.write_text('{"mcpServers": {}}\n', encoding="utf-8")
             cmd += ["--settings", str(req.settings_file), "--strict-mcp-config", "--mcp-config", str(mcp)]
         return cmd
 

@@ -13,7 +13,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from aidlc.harness import AuditLog
-from aidlc.util import now_iso
+from aidlc.util import file_lock, now_iso
 
 FILE = "permissions.json"
 CHOICES = {"once": "allowed_once", "run": "allowed_run", "deny": "denied"}
@@ -21,27 +21,18 @@ CHOICES = {"once": "allowed_once", "run": "allowed_run", "deny": "denied"}
 
 def load(run_dir: Path) -> list[dict]:
     path = run_dir / FILE
-    return json.loads(path.read_text()) if path.exists() else []
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
 
 
 def _save(run_dir: Path, items: list[dict]) -> None:
-    (run_dir / FILE).write_text(json.dumps(items, indent=2) + "\n")
+    (run_dir / FILE).write_text(json.dumps(items, indent=2) + "\n", encoding="utf-8")
 
 
 @contextlib.contextmanager
 def _locked(run_dir: Path) -> Iterator[None]:
     """Serialise read-modify-write of the request file across concurrent guard hooks."""
-    try:
-        import fcntl
-    except ImportError:  # Windows: no flock; hooks there run without the lock
+    with file_lock(run_dir / f"{FILE}.lock"):
         yield
-        return
-    with (run_dir / f"{FILE}.lock").open("a") as fh:
-        fcntl.flock(fh, fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(fh, fcntl.LOCK_UN)
 
 
 def request_id(subject: str) -> str:

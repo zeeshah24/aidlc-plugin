@@ -43,14 +43,14 @@ def _ident(cfg: Config, value: str) -> str:
 
 
 def _git(args: list[str], cwd: Path) -> str:
-    proc = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
+    proc = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     return proc.stdout.strip() if proc.returncode == 0 else ""
 
 
 def _audit_counts(paths: RunPaths) -> dict[str, int]:
     counts: dict[str, int] = {}
     if paths.audit_file.exists():
-        for line in paths.audit_file.read_text().splitlines():
+        for line in paths.audit_file.read_text(encoding="utf-8").splitlines():
             event = json.loads(line).get("event", "")
             counts[event] = counts.get(event, 0) + 1
     return counts
@@ -250,7 +250,7 @@ def send(cfg: Config, records: list[dict], spans: list[dict]) -> list[str]:
         path = Path(tcfg["file"]).expanduser()
         path = path if path.is_absolute() else cfg.root / path
         path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a") as fh:
+        with path.open("a", encoding="utf-8") as fh:
             fh.writelines(json.dumps(r, sort_keys=True) + "\n" for r in records)
         sinks.append("file")
     endpoint = tcfg.get("endpoint") or os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "")
@@ -324,7 +324,15 @@ def fetch_outcomes(root: Path, limit: int) -> list[dict]:
 
     def gh(search: str, json_fields: str) -> list[dict]:
         args = ["gh", "pr", "list", "--state", "all", "--limit", str(limit), "--search", search]
-        proc = subprocess.run([*args, "--json", json_fields], cwd=root, capture_output=True, text=True, timeout=300)
+        proc = subprocess.run(
+            [*args, "--json", json_fields],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=300,
+            encoding="utf-8",
+            errors="replace",
+        )
         if proc.returncode != 0:
             raise RuntimeError(f"gh pr list failed: {proc.stderr.strip()[-300:]}")
         return json.loads(proc.stdout or "[]")

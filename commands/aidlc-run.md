@@ -5,7 +5,8 @@ allowed-tools: Bash(aidlc:*), Read
 ---
 Run the deterministic AI-DLC orchestrator; do not perform the stages yourself.
 
-1. If `aidlc` is not on PATH, tell the user to run `${CLAUDE_PLUGIN_ROOT}/scripts/install.sh` and stop.
+1. If `aidlc` is not on PATH, tell the user to install it with
+   `pipx install "git+https://github.com/zeeshah24/aidlc-plugin#subdirectory=orchestrator"` and stop.
 2. If there is no `aidlc.yaml` in the repository root, run `aidlc init` first.
 3. Run `aidlc run` followed by the arguments (not `--headless`: in a Claude Code session the developer can approve).
 4. If the run stops at `awaiting_approval`, show the user the artifact it names (spec.md or plan.md),

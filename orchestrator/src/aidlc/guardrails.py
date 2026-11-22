@@ -25,7 +25,10 @@ from aidlc.harness import AuditLog, run_guardrails
 
 WRITE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
 NETWORK_TOOLS = {"WebFetch", "WebSearch"}
-GUARDED_MATCHER = "Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob|WebFetch|WebSearch|mcp__.*"
+SHELL_TOOLS = {"Bash", "PowerShell"}  # Claude Code on Windows uses PowerShell when Git Bash is missing
+GUARDED_MATCHER = "Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob|WebFetch|WebSearch|mcp__.*"
+# Windows and macOS file systems ignore case, so `.GitHub/Workflows/x` is `.github/workflows/x` there.
+CASE_INSENSITIVE_FS = sys.platform in ("win32", "darwin")
 READ_TOOLS = {"Read", "Grep", "Glob", "NotebookRead"}
 _SEGMENT_SPLIT = re.compile(r"\s*(?:&&|\|\||;|\||\n)\s*")
 
@@ -49,13 +52,29 @@ def _match(value: str, patterns: list[str]) -> str | None:
     )
 
 
+def _match_path(rel: str, patterns: list[str]) -> str | None:
+    if not CASE_INSENSITIVE_FS:
+        return _match(rel, patterns)
+    folded = _match(rel.lower(), [p.lower() for p in patterns])
+    return next((p for p in patterns if p.lower() == folded), None)
+
+
+def _relative(target: Path, jail: Path) -> str | None:
+    """`target` relative to the jail (posix separators), or None when it is outside."""
+    t, j = Path(os.path.realpath(target)), Path(os.path.realpath(jail))
+    tc, jc = (Path(str(t).lower()), Path(str(j).lower())) if CASE_INSENSITIVE_FS else (t, j)
+    if tc != jc and jc not in tc.parents:
+        return None
+    return "/".join(t.parts[len(j.parts) :]) or "."
+
+
 def approved_packages(run_dir: Path | None) -> dict[str, str | None]:
     if not run_dir:
         return {}
     path = run_dir / "dependencies.json"
     if not path.exists():
         return {}
-    deps = json.loads(path.read_text()).get("dependencies", [])
+    deps = json.loads(path.read_text(encoding="utf-8")).get("dependencies", [])
     return {d["name"].lower(): d.get("version") for d in deps if d.get("status") == "approved"}
 
 
@@ -63,7 +82,7 @@ def locked_paths(run_dir: Path | None) -> set[str]:
     if not run_dir:
         return set()
     path = run_dir / "test-lock.json"
-    return set(json.loads(path.read_text()).get("files", {})) if path.exists() else set()
+    return set(json.loads(path.read_text(encoding="utf-8")).get("files", {})) if path.exists() else set()
 
 
 def _parse_spec(word: str) -> tuple[str, str | None]:
@@ -126,19 +145,16 @@ def check_command(command: str, guardrails: dict, run_dir: Path | None = None) -
 
 def check_write(file_path: str, guardrails: dict, jail: Path, run_dir: Path | None = None) -> Decision:
     target = Path(file_path)
-    if not target.is_absolute():
-        target = jail / target
-    target = Path(os.path.realpath(target))
-    jail = Path(os.path.realpath(jail))
-    if target != jail and jail not in target.parents:
+    rel = _relative(target if target.is_absolute() else jail / target, jail)
+    if rel is None:
         return Decision(False, f"{file_path} is outside the workspace jail {jail}")
-    rel = target.relative_to(jail).as_posix()
-    rule = _match(rel, guardrails.get("paths", {}).get("protected", []))
+    rule = _match_path(rel, guardrails.get("paths", {}).get("protected", []))
     if rule:
         return Decision(False, f"{rel} is protected by '{rule}'")
-    if rel in locked_paths(run_dir):
+    locked = locked_paths(run_dir)
+    if rel in locked or (CASE_INSENSITIVE_FS and rel in {p.lower() for p in locked}):
         return Decision(False, f"{rel} is a locked red test; make the implementation satisfy it instead")
-    rule = _match(rel, guardrails.get("paths", {}).get("ask", []))
+    rule = _match_path(rel, guardrails.get("paths", {}).get("ask", []))
     if rule:
         return Decision(False, f"writing {rel} needs developer approval ('{rule}')", ask=True, subject=f"write:{rel}")
     return Decision(True)
@@ -146,14 +162,10 @@ def check_write(file_path: str, guardrails: dict, jail: Path, run_dir: Path | No
 
 def check_read(file_path: str, guardrails: dict, jail: Path) -> Decision:
     target = Path(file_path)
-    if not target.is_absolute():
-        target = jail / target
-    target = Path(os.path.realpath(target))
-    jail = Path(os.path.realpath(jail))
-    if target != jail and jail not in target.parents:
+    rel = _relative(target if target.is_absolute() else jail / target, jail)
+    if rel is None:
         return Decision(False, f"{file_path} is outside the workspace jail {jail}")
-    rel = target.relative_to(jail).as_posix()
-    rule = _match(rel, guardrails.get("paths", {}).get("no_read", []))
+    rule = _match_path(rel, guardrails.get("paths", {}).get("no_read", []))
     if rule:
         return Decision(False, f"{rel} may not be read ('{rule}')")
     return Decision(True)
@@ -164,7 +176,7 @@ def evaluate(tool_name: str, tool_input: dict, guardrails: dict, jail: Path, run
         if _match(tool_name, guardrails.get("tools", {}).get("allow", [])):
             return Decision(True)
         return Decision(False, f"{tool_name} is not in tools.allow (network and MCP tools are denied by default)")
-    if tool_name == "Bash":
+    if tool_name in SHELL_TOOLS:
         return check_command(tool_input.get("command", ""), guardrails, run_dir)
     if tool_name in WRITE_TOOLS:
         path = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
