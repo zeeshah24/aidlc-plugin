@@ -294,6 +294,13 @@ def run_test(ctx: StageContext) -> Outcome:
     profile = ctx.profile()
     globs = profile.get("test_globs", [])
     ids = traceability.requirement_ids(ctx.read("spec"), ctx.id_pattern())
+    base_code, base_out = run_tests(ctx)
+    if base_code not in (0, 5):  # 5 = pytest "no tests collected"
+        return Outcome(
+            "failed",
+            f"existing test suite already fails (exit {base_code}); fix it so the red gate is meaningful:\n"
+            + tail(base_out, 1500),
+        )
 
     def attempt(feedback: list[str]) -> Outcome:
         prompt = prompts.build(

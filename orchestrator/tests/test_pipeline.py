@@ -122,6 +122,18 @@ def test_red_tests_must_fail_first(repo: Path, requirement: Path):
     assert any("must fail" in n for n in state.stages["test"].notes)
 
 
+def test_red_gate_requires_green_baseline(repo: Path, requirement: Path):
+    from conftest import commit
+
+    (repo / "tests" / "test_broken.py").write_text("def test_broken():\n    assert False\n")
+    commit(repo, "broken")
+    pipe, fake = pipeline(repo, Script())
+    state, paths = pipe.start(intake.from_file(requirement))
+    assert pipe.execute(state, paths, stages.select(end="test")) == "failed"
+    assert "already fails" in state.history[-1]["detail"]
+    assert not [c for c in fake.calls if c.stage == "test"]
+
+
 def test_non_test_edits_by_test_writer_are_discarded(repo: Path, requirement: Path):
     def sneaky(r):
         write(r, "calc.py", IMPL)
