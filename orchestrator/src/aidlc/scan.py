@@ -267,9 +267,12 @@ def public_api(root: Path, files: list[str], test_globs: list[str]) -> dict[str,
 
 def _signature(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
     a = fn.args
-    required = len(a.args) - len(a.defaults)
-    parts = [f"{x.arg}{'' if i < required else '='}" for i, x in enumerate(a.args)]
-    parts += [f"*{a.vararg.arg}"] if a.vararg else []
+    positional = [*a.posonlyargs, *a.args]
+    required = len(positional) - len(a.defaults)
+    parts = [f"{x.arg}{'' if i < required else '='}" for i, x in enumerate(positional)]
+    if a.posonlyargs:
+        parts.insert(len(a.posonlyargs), "/")
+    parts += [f"*{a.vararg.arg}"] if a.vararg else (["*"] if a.kwonlyargs else [])
     parts += [f"{k.arg}{'=' if d is not None else ''}" for k, d in zip(a.kwonlyargs, a.kw_defaults, strict=False)]
     parts += [f"**{a.kwarg.arg}"] if a.kwarg else []
     return "(" + ", ".join(parts) + ")"
