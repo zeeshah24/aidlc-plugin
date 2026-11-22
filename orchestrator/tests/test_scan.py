@@ -32,7 +32,9 @@ def test_builtin_analyzers(tmp_path: Path):
     (tmp_path / "ini" / "sub.py").write_text("")
     (tmp_path / "outer.py").write_text("import ini.sub\n")
     assert scan.circular_imports(tmp_path, ["ini/__init__.py", "ini/sub.py", "outer.py"])
-    (tmp_path / "ini" / "__init__.py").write_text("from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    import outer\n")
+    (tmp_path / "ini" / "__init__.py").write_text(
+        "from typing import TYPE_CHECKING\nif TYPE_CHECKING:\n    import outer\n"
+    )
     assert scan.circular_imports(tmp_path, ["ini/__init__.py", "ini/sub.py", "outer.py"]) == []
     assert [f.category for f in scan.circular_imports(tmp_path, files)] == ["circular_dependency"]
     assert [f.file for f in scan.complexity(tmp_path, files, 3)] == ["c.py"]
