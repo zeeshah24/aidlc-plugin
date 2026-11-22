@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import fnmatch
 import hashlib
 import os
@@ -64,10 +65,8 @@ def run_killable(cmd, *, timeout: float | None, input: str | None = None, **kwar
     try:
         out, err = proc.communicate(input, timeout=timeout)
     except BaseException:
-        try:
+        with contextlib.suppress(ProcessLookupError):
             os.killpg(proc.pid, signal.SIGKILL) if posix else proc.kill()
-        except ProcessLookupError:
-            pass
         proc.communicate()
         raise
     return subprocess.CompletedProcess(cmd, proc.returncode, out, err)

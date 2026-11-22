@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import shutil
-import subprocess
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field

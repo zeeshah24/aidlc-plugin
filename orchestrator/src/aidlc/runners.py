@@ -16,7 +16,7 @@ from aidlc.config import Config
 from aidlc.guardrails import _match as guardrails_match
 from aidlc.harness import AuditLog, RunPaths
 from aidlc.state import RunState
-from aidlc.util import glob_match, head, sha256_file, strip_fence, tail
+from aidlc.util import glob_match, head, run_killable, sha256_file, strip_fence, tail
 
 
 class StageError(RuntimeError):

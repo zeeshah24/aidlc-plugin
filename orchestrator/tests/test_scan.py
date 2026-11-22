@@ -87,3 +87,29 @@ def test_scan_reports_analyzers_that_ran_and_uncovered_languages(tmp_path: Path)
     res = run_scanners(tmp_path, {"languages": ["java"], "test_globs": []}, {"analyzers": ["duplication"]})
     assert res.ran == ["builtin:duplication"]
     assert any("java" in s and "SARIF" in s for s in res.skipped)
+
+
+def test_signature_tracks_keyword_and_positional_only_markers():
+    import ast
+
+    from aidlc.scan import _signature
+
+    def sig(src: str) -> str:
+        return _signature(ast.parse(src).body[0])
+
+    assert sig("def f(a, b): ...") != sig("def f(a, *, b): ...")
+    assert sig("def f(a, /, b): ...") != sig("def f(b): ...")
+
+
+def test_failed_npm_audit_is_not_clean(monkeypatch, tmp_path):
+    import subprocess
+
+    from aidlc import scan
+
+    monkeypatch.setattr(scan, "_run", lambda cmd, cwd: subprocess.CompletedProcess(cmd, 1, "", "ENOLOCK"))
+    try:
+        scan.npm_audit(tmp_path)
+    except subprocess.SubprocessError as exc:
+        assert "ENOLOCK" in str(exc)
+    else:
+        raise AssertionError("expected npm audit failure")

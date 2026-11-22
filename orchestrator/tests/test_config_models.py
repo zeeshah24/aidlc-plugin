@@ -93,6 +93,9 @@ def test_project_cannot_relax_org_isolation(repo: Path):
         (repo / "aidlc.yaml").write_text(yaml.safe_dump(data))
         cfg = load_config(repo)
         assert cfg.get("harness.require_isolation") is True and any("isolation" in w for w in cfg.warnings)
+    data["harness"] = {"isolated": True}
+    (repo / "aidlc.yaml").write_text(yaml.safe_dump(data))
+    assert not load_config(repo).get("harness.isolated")
 
 
 def test_unknown_and_mistyped_keys_warn(repo: Path):
@@ -132,3 +135,31 @@ def test_project_can_narrow_but_not_widen_tools_allow():
     assert merged["tools"]["allow"] == []
     merged, warnings = merge_guardrails({"tools": {"allow": []}}, {"tools": {"allow": ["WebFetch"]}})
     assert merged["tools"]["allow"] == [] and warnings
+
+
+def test_glob_double_star_matches_zero_directories():
+    from aidlc.util import glob_match
+
+    assert glob_match("tests/helpers.py", ["tests/**/*.py"])
+    assert glob_match("tests/unit/test_a.py", ["tests/**/*.py"])
+    assert not glob_match("src/helpers.py", ["tests/**/*.py"])
+
+
+def test_project_may_tighten_block_on_cve():
+    from aidlc.config import merge_guardrails
+
+    merged, _ = merge_guardrails({"dependencies": {"block_on_cve": False}}, {"dependencies": {"block_on_cve": True}})
+    assert merged["dependencies"]["block_on_cve"] is True
+
+
+def test_run_killable_kills_the_process_group():
+    import contextlib
+    import subprocess
+    import time
+
+    from aidlc.util import run_killable
+
+    t0 = time.monotonic()
+    with contextlib.suppress(subprocess.TimeoutExpired):
+        run_killable("sleep 30 & sleep 30", shell=True, timeout=0.5)
+    assert time.monotonic() - t0 < 10

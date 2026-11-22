@@ -424,7 +424,9 @@ def npm_audit(root: Path) -> list[Finding]:
     proc = _run(["npm", "audit", "--json"], root)
     data = json.loads(proc.stdout or "{}")
     if "error" in data or ("vulnerabilities" not in data and proc.returncode != 0):
-        raise subprocess.SubprocessError(f"npm audit did not complete: {proc.stderr.strip()[-300:] or data.get('error')}")
+        raise subprocess.SubprocessError(
+            f"npm audit did not complete: {proc.stderr.strip()[-300:] or data.get('error')}"
+        )
     return [
         Finding(
             "npm-audit",
