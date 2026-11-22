@@ -36,8 +36,16 @@ def load_yaml(path: Path) -> dict:
 
 
 def glob_match(path: str, globs: list[str]) -> bool:
-    """fnmatch where a leading `**/` also matches files at the repository root."""
-    return any(fnmatch.fnmatch(path, g) or (g.startswith("**/") and fnmatch.fnmatch(path, g[3:])) for g in globs)
+    """fnmatch where `**/` also matches zero directories (`tests/**/*.py` matches `tests/x.py`)."""
+
+    def one(g: str) -> bool:
+        return (
+            fnmatch.fnmatch(path, g)
+            or (g.startswith("**/") and fnmatch.fnmatch(path, g[3:]))
+            or ("/**/" in g and fnmatch.fnmatch(path, g.replace("/**/", "/")))
+        )
+
+    return any(one(g) for g in globs)
 
 
 def run_killable(cmd, *, timeout: float | None, input: str | None = None, **kwargs) -> subprocess.CompletedProcess:
