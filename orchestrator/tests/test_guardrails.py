@@ -61,4 +61,27 @@ def test_write_jail_protected_and_locked(rails, tmp_path: Path):
     assert not check_write("config/.env", rails, jail, run_dir).allowed
     assert not check_write("tests/test_a.py", rails, jail, run_dir).allowed
     assert not evaluate("Edit", {"file_path": "tests/test_a.py"}, rails, jail, run_dir).allowed
-    assert evaluate("Read", {"file_path": "/etc/hosts"}, rails, jail, run_dir).allowed
+    assert evaluate("Read", {"file_path": "src/app.py"}, rails, jail, run_dir).allowed
+    assert not evaluate("Read", {"file_path": "/etc/hosts"}, rails, jail, run_dir).allowed
+    assert not evaluate("Read", {"file_path": "config/.env"}, rails, jail, run_dir).allowed
+    assert not evaluate("Grep", {"pattern": "x", "path": "/home"}, rails, jail, run_dir).allowed
+    assert evaluate("Grep", {"pattern": "x"}, rails, jail, run_dir).allowed
+
+
+def test_symlink_writes_resolve_to_target(rails, tmp_path: Path):
+    jail = tmp_path / "wt"
+    (jail / ".github" / "workflows").mkdir(parents=True)
+    (jail / "ci.yml").symlink_to(jail / ".github" / "workflows" / "ci.yml")
+    (jail / "out").symlink_to(tmp_path)
+    assert not check_write("ci.yml", rails, jail).allowed
+    assert not check_write("out/x.py", rails, jail).allowed
+
+
+def test_test_env_excludes_model_credentials(repo: Path, tmp_path: Path, monkeypatch):
+    from aidlc.harness import RunPaths, scoped_env
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "k")
+    cfg = load_config(repo)
+    paths = RunPaths(repo, tmp_path / "run", repo)
+    assert "ANTHROPIC_API_KEY" in scoped_env(cfg, paths, "implement")
+    assert "ANTHROPIC_API_KEY" not in scoped_env(cfg, paths, "tests")

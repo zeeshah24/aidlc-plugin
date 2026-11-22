@@ -20,6 +20,7 @@ from aidlc.config import load_config
 from aidlc.harness import AuditLog
 
 WRITE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
+READ_TOOLS = {"Read", "Grep", "Glob", "NotebookRead"}
 _SEGMENT_SPLIT = re.compile(r"\s*(?:&&|\|\||;|\||\n)\s*")
 
 
@@ -92,8 +93,8 @@ def check_write(file_path: str, guardrails: dict, jail: Path, run_dir: Path | No
     target = Path(file_path)
     if not target.is_absolute():
         target = jail / target
-    target = Path(os.path.normpath(target))
-    jail = Path(os.path.normpath(jail))
+    target = Path(os.path.realpath(target))
+    jail = Path(os.path.realpath(jail))
     if target != jail and jail not in target.parents:
         return Decision(False, f"{file_path} is outside the workspace jail {jail}")
     rel = target.relative_to(jail).as_posix()
@@ -105,12 +106,30 @@ def check_write(file_path: str, guardrails: dict, jail: Path, run_dir: Path | No
     return Decision(True)
 
 
+def check_read(file_path: str, guardrails: dict, jail: Path) -> Decision:
+    target = Path(file_path)
+    if not target.is_absolute():
+        target = jail / target
+    target = Path(os.path.realpath(target))
+    jail = Path(os.path.realpath(jail))
+    if target != jail and jail not in target.parents:
+        return Decision(False, f"{file_path} is outside the workspace jail {jail}")
+    rel = target.relative_to(jail).as_posix()
+    rule = _match(rel, guardrails.get("paths", {}).get("no_read", []))
+    if rule:
+        return Decision(False, f"{rel} may not be read ('{rule}')")
+    return Decision(True)
+
+
 def evaluate(tool_name: str, tool_input: dict, guardrails: dict, jail: Path, run_dir: Path | None) -> Decision:
     if tool_name == "Bash":
         return check_command(tool_input.get("command", ""), guardrails, run_dir)
     if tool_name in WRITE_TOOLS:
         path = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
         return check_write(path, guardrails, jail, run_dir)
+    if tool_name in READ_TOOLS:
+        path = tool_input.get("file_path") or tool_input.get("notebook_path") or tool_input.get("path") or ""
+        return check_read(path, guardrails, jail) if path else Decision(True)
     return Decision(True)
 
 

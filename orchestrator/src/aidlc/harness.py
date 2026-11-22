@@ -68,6 +68,9 @@ def scoped_env(cfg: Config, paths: RunPaths, stage: str) -> dict[str, str]:
     """Only pass through allowlisted environment variables (scoped tokens)."""
     allowed = cfg.guardrails.get("env", {}).get("passthrough", [])
     env = {k: v for k, v in os.environ.items() if k in allowed}
+    if stage == "tests":
+        for key in cfg.guardrails.get("env", {}).get("test_exclude", []):
+            env.pop(key, None)
     env.update(
         AIDLC_RUN_DIR=str(paths.run_dir),
         AIDLC_JAIL=str(paths.workdir),
@@ -87,7 +90,7 @@ def hook_settings(paths: RunPaths) -> Path:
         "hooks": {
             "PreToolUse": [
                 {
-                    "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit",
+                    "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob",
                     "hooks": [{"type": "command", "command": f"{cmd} pre-tool"}],
                 }
             ],

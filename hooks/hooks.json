@@ -2,7 +2,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit",
+        "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob",
         "hooks": [{"type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/aidlc-guard.sh pre-tool"}]
       }
     ],

@@ -51,6 +51,7 @@ def merge_guardrails(base: dict, override: dict) -> tuple[dict, list[str]]:
 
     o_paths, b_paths = override.get("paths", {}), out.setdefault("paths", {})
     b_paths["protected"] = _union(b_paths.get("protected", []), o_paths.get("protected", []))
+    b_paths["no_read"] = _union(b_paths.get("no_read", []), o_paths.get("no_read", []))
 
     o_dep, b_dep = override.get("dependencies", {}), out.setdefault("dependencies", {})
     for key in ("allowed_licenses", "allowed_registries"):
@@ -63,6 +64,7 @@ def merge_guardrails(base: dict, override: dict) -> tuple[dict, list[str]]:
     o_env, b_env = override.get("env", {}), out.setdefault("env", {})
     if "passthrough" in o_env:
         b_env["passthrough"] = _subset(b_env.get("passthrough", []), o_env["passthrough"], "env.passthrough", warnings)
+    b_env["test_exclude"] = _union(b_env.get("test_exclude", []), o_env.get("test_exclude", []))
 
     out["prompt_rules"] = _union(out.get("prompt_rules", []), override.get("prompt_rules", []))
     return out, warnings

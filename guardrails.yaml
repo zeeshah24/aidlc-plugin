@@ -94,6 +94,14 @@ paths:
     - "**/*.pem"
     - "**/*.key"
     - "**/secrets/**"
+  no_read:                # secrets the Read/Grep/Glob tools may not open
+    - ".env"
+    - "**/.env"
+    - ".env.*"
+    - "**/.env.*"
+    - "**/*.pem"
+    - "**/*.key"
+    - "**/secrets/**"
 dependencies:
   install_commands:
     - "pip install*"
@@ -113,6 +121,9 @@ dependencies:
   allowed_registries: [PyPI, npm, Go, Maven, NuGet, crates.io]
   block_on_cve: true
 env:
+  # Never forwarded to test runs, which execute agent-written code.
+  test_exclude: [ANTHROPIC_API_KEY, OPENAI_API_KEY, CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX, AWS_PROFILE,
+                 CODEX_HOME]
   # Scoped tokens: only these variables reach agent and test subprocesses.
   passthrough: [PATH, HOME, USER, LANG, LC_ALL, TERM, TMPDIR, SHELL, VIRTUAL_ENV, PYTHONPATH, JAVA_HOME,
                 GOPATH, GOROOT, GOCACHE, NODE_PATH, ANTHROPIC_API_KEY, CLAUDE_CODE_USE_BEDROCK,
