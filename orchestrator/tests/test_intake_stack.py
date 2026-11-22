@@ -14,6 +14,11 @@ def test_markdown_frontmatter_and_heading(tmp_path: Path):
     b = tmp_path / "story.md"
     b.write_text("# SHOP-12: Cart totals\n")
     assert intake.from_file(b).req_id == "SHOP-12"
+    evil = tmp_path / "evil.md"
+    evil.write_text("---\nid: ../../README\n---\n# x\n")
+    assert intake.from_file(evil).req_id == "readme"
+    with pytest.raises(ValueError):
+        intake.write_requirement(intake.Requirement("../x", "t", "b", "s"), tmp_path / ".aidlc")
     out = intake.write_requirement(intake.from_file(a), tmp_path / ".aidlc")
     assert out.name == "PAY-7.md" and "source: file:" in out.read_text()
 

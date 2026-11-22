@@ -15,6 +15,7 @@ import yaml
 from aidlc.util import slugify
 
 TICKET_RE = re.compile(r"^[A-Z][A-Z0-9]+-\d+$")
+SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
 
 
 @dataclass
@@ -36,6 +37,8 @@ def from_file(path: Path) -> Requirement:
     heading = next((ln[2:].strip() for ln in text.splitlines() if ln.startswith("# ")), path.stem)
     found = re.search(r"\b[A-Z][A-Z0-9]+-\d+\b", heading)
     req_id = str(meta.get("id") or (found.group(0) if found else slugify(path.stem)))
+    if not SAFE_ID.match(req_id) or ".." in req_id:
+        req_id = slugify(req_id)
     title = str(meta.get("title") or heading)
     return Requirement(req_id, title, text, f"file:{path}")
 
@@ -77,6 +80,8 @@ def from_jira(key: str, jira_cfg: dict, fetch=_jira_request) -> Requirement:
 
 
 def write_requirement(req: Requirement, aidlc_dir: Path) -> Path:
+    if not SAFE_ID.match(req.req_id) or ".." in req.req_id:
+        raise ValueError(f"unsafe requirement id: {req.req_id!r}")
     path = aidlc_dir / "requirements" / f"{req.req_id}.md"
     path.parent.mkdir(parents=True, exist_ok=True)
     front = yaml.safe_dump({"id": req.req_id, "title": req.title, "source": req.source}, sort_keys=False)
