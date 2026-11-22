@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import hashlib
 import re
 import urllib.request
 from dataclasses import dataclass
@@ -38,7 +39,8 @@ def from_file(path: Path) -> Requirement:
     found = re.search(r"\b[A-Z][A-Z0-9]+-\d+\b", heading)
     req_id = str(meta.get("id") or (found.group(0) if found else slugify(path.stem)))
     if not SAFE_ID.match(req_id) or ".." in req_id:
-        req_id = slugify(req_id)[:100].rstrip("-") or "req"
+        digest = hashlib.sha256(req_id.encode()).hexdigest()[:8]
+        req_id = f"{slugify(req_id)[:90].rstrip('-') or 'req'}-{digest}"
     title = str(meta.get("title") or heading)
     return Requirement(req_id, title, text, f"file:{path}")
 
