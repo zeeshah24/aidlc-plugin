@@ -39,7 +39,7 @@ telemetry:
 
 | Field | Meaning |
 |---|---|
-| `run_id`, `aidlc_version`, `created`, `status`, `loops` | Run identity and result |
+| `run_id`, `aidlc_version`, `created`, `status`, `loops` | Run identity and result (`run_id` hashed by default; it embeds the requirement id) |
 | `team`, `repo` | Reporting dimensions (`repo` hashed by default) |
 | `developer` | Only with `include_developer: true`; hashed by default |
 | `rating` | Optional 1-5 developer rating, or `null` |
@@ -55,7 +55,7 @@ is derived from the run ID, so later outcome spans join the same trace.
 
 Each run stamps `AIDLC-Run: <run-id>` as a trailer on its commits and as the last line of the PR body, and
 labels the PR `aidlc` (`pr.label`). `aidlc outcomes` lists that repository's AI-DLC PRs with the adopter's own
-`gh` credentials and prints one `aidlc.outcome/1` JSON line each; `--export` also sends them to the configured
+`gh` credentials and prints one `aidlc.outcome/1` JSON line each (run ids hashed like run records, so they still join); `--export` also sends them to the configured
 sinks as `aidlc.outcome` spans.
 
 | Field | Meaning |
