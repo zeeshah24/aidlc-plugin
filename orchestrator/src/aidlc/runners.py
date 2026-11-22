@@ -16,6 +16,7 @@ from aidlc import deps, gitutil, harness, models, prompts, report, scan, stack, 
 from aidlc.adapters import AgentAdapter, AgentRequest, AgentResult
 from aidlc.config import Config
 from aidlc.harness import AuditLog, RunPaths
+from aidlc.guardrails import _match as guardrails_match
 from aidlc.state import RunState
 from aidlc.util import glob_match, head, sha256_file, strip_fence, tail
 
@@ -150,7 +151,7 @@ def discard(ctx: StageContext, paths: list[str]) -> None:
 
 def protected_changes(ctx: StageContext, changed: list[str]) -> list[str]:
     rules = ctx.cfg.guardrails.get("paths", {}).get("protected", [])
-    return [p for p in changed if any(fnmatch.fnmatchcase(p, r) for r in rules)]
+    return [p for p in changed if guardrails_match(p, rules)]
 
 
 def section(md: str, title: str) -> str:

@@ -74,6 +74,8 @@ def test_write_jail_protected_and_locked(rails, tmp_path: Path):
     assert evaluate("Read", {"file_path": "src/app.py"}, rails, jail, run_dir).allowed
     assert not evaluate("Read", {"file_path": "/etc/hosts"}, rails, jail, run_dir).allowed
     assert not evaluate("Read", {"file_path": "config/.env"}, rails, jail, run_dir).allowed
+    assert not evaluate("Read", {"file_path": "server.pem"}, rails, jail, run_dir).allowed
+    assert not evaluate("Read", {"file_path": "secrets/token"}, rails, jail, run_dir).allowed
     assert not evaluate("Grep", {"pattern": "x", "path": "/home"}, rails, jail, run_dir).allowed
     assert evaluate("Grep", {"pattern": "x"}, rails, jail, run_dir).allowed
 

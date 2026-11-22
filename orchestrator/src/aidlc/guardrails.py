@@ -31,7 +31,10 @@ class Decision:
 
 
 def _match(value: str, patterns: list[str]) -> str | None:
-    return next((p for p in patterns if fnmatch.fnmatchcase(value, p)), None)
+    return next(
+        (p for p in patterns if fnmatch.fnmatchcase(value, p) or (p.startswith("**/") and fnmatch.fnmatchcase(value, p[3:]))),
+        None,
+    )
 
 
 def approved_packages(run_dir: Path | None) -> dict[str, str | None]:
