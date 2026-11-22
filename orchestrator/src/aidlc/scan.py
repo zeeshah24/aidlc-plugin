@@ -95,7 +95,9 @@ def circular_imports(root: Path, files: list[str]) -> list[Finding]:
                     pkg_parts = package.split(".") if package else []
                     pkg_parts = pkg_parts[: len(pkg_parts) - (node.level - 1)] if node.level > 1 else pkg_parts
                     base = ".".join([*pkg_parts, base] if base else pkg_parts)
-                targets = [f"{base}.{a.name}" if base else a.name for a in node.names] + [base]
+                for a in node.names:
+                    sub = f"{base}.{a.name}" if base else a.name
+                    targets.append(sub if sub in modules else base)
             for t in targets:
                 while t and t not in modules:
                     t = t.rpartition(".")[0]

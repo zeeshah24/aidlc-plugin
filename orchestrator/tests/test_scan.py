@@ -22,6 +22,11 @@ def test_builtin_analyzers(tmp_path: Path):
     (tmp_path / "pkg" / "b.py").write_text("import pkg.a\n")
     (tmp_path / "c.py").write_text(BRANCHY.format("f"))
     files = ["pkg/__init__.py", "pkg/a.py", "pkg/b.py", "c.py"]
+    (tmp_path / "sib").mkdir()
+    (tmp_path / "sib" / "__init__.py").write_text("from sib.x import X\n")
+    (tmp_path / "sib" / "x.py").write_text("from . import y\nX = 1\n")
+    (tmp_path / "sib" / "y.py").write_text("")
+    assert scan.circular_imports(tmp_path, ["sib/__init__.py", "sib/x.py", "sib/y.py"]) == []
     assert [f.category for f in scan.circular_imports(tmp_path, files)] == ["circular_dependency"]
     assert [f.file for f in scan.complexity(tmp_path, files, 3)] == ["c.py"]
     api = scan.public_api(tmp_path, files, [])
