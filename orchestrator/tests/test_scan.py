@@ -46,3 +46,9 @@ def test_baseline_delta_gate(repo: Path, tmp_path: Path):
     assert not result["passed"]
     assert {f["file"] for f in result["blocking"]} == {"new.py"}
     assert "new.py" in scan.render(result)
+
+    lenient = {**CFG, "complexity_threshold": 50}
+    assert scan.gate(repo, repo, base, PROFILE, lenient, "", tmp_path / "cache")["passed"]
+    strict = {**CFG, "complexity_threshold": 1}
+    result = scan.gate(repo, repo, base, PROFILE, strict, "", tmp_path / "cache")
+    assert {f["file"] for f in result["blocking"] if f["category"] == "complexity"} == {"new.py"}

@@ -499,7 +499,8 @@ def gate(
 ) -> dict:
     """Scan head and baseline; only findings new relative to the baseline can block."""
     cache_dir.mkdir(parents=True, exist_ok=True)
-    cache = cache_dir / f"scan-baseline-{base_sha[:12]}.json"
+    fingerprint = hashlib.sha256(json.dumps([gate_cfg, profile], sort_keys=True).encode()).hexdigest()[:12]
+    cache = cache_dir / f"scan-baseline-{base_sha[:12]}-{fingerprint}.json"
     if cache.exists():
         base = json.loads(cache.read_text())
     else:
