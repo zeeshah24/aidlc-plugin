@@ -99,6 +99,16 @@ class Config:
         return node
 
 
+def schema_warnings(local: dict) -> list[str]:
+    """Typos in aidlc.yaml would otherwise silently fall back to defaults."""
+    known = yaml.safe_load(template(PROJECT_FILE)) or {}
+    out = [f"aidlc.yaml: unknown key '{k}' (ignored)" for k in local if k not in known]
+    for key, default in known.items():
+        if isinstance(default, dict) and key in local and not isinstance(local[key], dict | None):
+            out.append(f"aidlc.yaml: '{key}' must be a mapping, got {type(local[key]).__name__}")
+    return out
+
+
 def load_config(root: Path) -> Config:
     plugin = plugin_root()
     models = load_yaml(plugin / "models.yaml")
@@ -111,7 +121,7 @@ def load_config(root: Path) -> Config:
     project = deep_merge(project, load_yaml(org / PROJECT_FILE))
 
     local = load_yaml(root / PROJECT_FILE)
-    warnings: list[str] = []
+    warnings: list[str] = schema_warnings(local)
     if "telemetry" in load_yaml(org / PROJECT_FILE) and "telemetry" in local:
         # the org owns telemetry policy; a project may only switch it off
         requested = local.pop("telemetry") or {}

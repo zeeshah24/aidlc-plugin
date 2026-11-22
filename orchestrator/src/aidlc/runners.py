@@ -6,12 +6,11 @@ import json
 import re
 import shutil
 import subprocess
-import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from aidlc import deps, gitutil, harness, models, prompts, report, scan, stack, telemetry, traceability
+from aidlc import deps, github, gitutil, harness, models, prompts, report, scan, stack, telemetry, traceability
 from aidlc.adapters import AgentAdapter, AgentRequest, AgentResult
 from aidlc.config import Config
 from aidlc.guardrails import _match as guardrails_match
@@ -596,10 +595,6 @@ def pr_body(ctx: StageContext) -> str:
     return "\n".join(parts) + "\n"
 
 
-def _gh(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
-    return subprocess.run(["gh", *args], cwd=cwd, capture_output=True, text=True, timeout=300)
-
-
 def run_pr(ctx: StageContext) -> Outcome:
     body_file = ctx.paths.run_dir / "pr-body.md"
     body_file.write_text(pr_body(ctx))
@@ -630,28 +625,28 @@ def run_pr(ctx: StageContext) -> Outcome:
         ]
         if pr_cfg.get("draft", False):
             args.append("--draft")
-        proc = _gh(args, ctx.workdir)
+        proc = github.gh(args, ctx.workdir)
         if proc.returncode != 0:
             return Outcome("failed", f"gh pr create failed: {proc.stderr.strip()[-500:]}")
         existing = {"url": proc.stdout.strip().splitlines()[-1]}
     else:
-        _gh(["pr", "edit", existing["url"], "--body-file", str(body_file)], ctx.workdir)
+        github.gh(["pr", "edit", existing["url"], "--body-file", str(body_file)], ctx.workdir)
     label = pr_cfg.get("label", "aidlc")
     if label:  # best effort: lets outcome dashboards filter aidlc PRs
-        _gh(
+        github.gh(
             ["label", "create", label, "--color", "5319e7", "--description", "Opened by AI-DLC", "--force"], ctx.workdir
         )
-        _gh(["pr", "edit", existing["url"], "--add-label", label], ctx.workdir)
+        github.gh(["pr", "edit", existing["url"], "--add-label", label], ctx.workdir)
     ctx.paths.artifact("pr").write_text(json.dumps(existing, indent=2) + "\n")
     wait = int(pr_cfg.get("wait_for_checks_s", 0))
     if wait <= 0:
         return Outcome("passed", existing["url"], gate="opened")
-    failed = wait_for_checks(ctx, existing["url"], wait, int(pr_cfg.get("poll_interval_s", 30)))
+    failed = github.wait_for_checks(ctx.workdir, existing["url"], wait, int(pr_cfg.get("poll_interval_s", 30)))
     if failed is None:
         return Outcome("passed", f"{existing['url']} (checks still pending)", gate="pending")
     if not failed:
         return Outcome("passed", f"{existing['url']} (checks green)", gate="green")
-    logs = "\n\n".join(failed_logs(ctx, c) for c in failed)
+    logs = "\n\n".join(github.failed_logs(ctx.workdir, c) for c in failed)
     prompt = prompts.build(
         ctx.cfg,
         "pr",
@@ -667,26 +662,6 @@ def run_pr(ctx: StageContext) -> Outcome:
         bullets(triage) or [triage.strip()[:2000]],
         gate="checks-failed",
     )
-
-
-def wait_for_checks(ctx: StageContext, url: str, timeout_s: int, interval_s: int) -> list[dict] | None:
-    deadline = time.monotonic() + timeout_s
-    while True:
-        proc = _gh(["pr", "checks", url, "--json", "name,bucket,link"], ctx.workdir)
-        checks = json.loads(proc.stdout or "[]") if proc.stdout.strip().startswith("[") else []
-        if checks and all(c["bucket"] != "pending" for c in checks):
-            return [c for c in checks if c["bucket"] == "fail"]
-        if time.monotonic() >= deadline:
-            return None
-        time.sleep(interval_s)
-
-
-def failed_logs(ctx: StageContext, check: dict) -> str:
-    m = re.search(r"/actions/runs/(\d+)", check.get("link", ""))
-    if not m:
-        return f"{check['name']}: no logs available"
-    proc = _gh(["run", "view", m.group(1), "--log-failed"], ctx.workdir)
-    return f"### {check['name']}\n{tail(proc.stdout, 8000)}"
 
 
 # --- stage 9 ---------------------------------------------------------------------------------

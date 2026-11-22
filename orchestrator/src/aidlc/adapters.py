@@ -195,5 +195,12 @@ class FakeAdapter:
         )
 
 
+# What each provider can enforce; `aidlc doctor` prints this so adopters see the trade-offs.
+CAPABILITIES = {
+    "claude": {"pre-tool hooks": True, "reports cost": True, "os sandbox": False},
+    "codex": {"pre-tool hooks": False, "reports cost": False, "os sandbox": True},
+}
+
+
 def default_adapters() -> dict[str, AgentAdapter]:
     return {"claude": ClaudeCodeAdapter(), "codex": CodexAdapter()}

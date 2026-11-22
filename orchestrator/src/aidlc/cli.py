@@ -12,9 +12,10 @@ import tempfile
 from pathlib import Path
 
 from aidlc import __version__, gitutil, intake, models, stack, stages
+from aidlc.adapters import CAPABILITIES
 from aidlc.config import AIDLC_DIR, PROJECT_FILE, load_config
 from aidlc.orchestrator import Pipeline, PipelineError, RunOptions, interactive_ask, record_approval
-from aidlc.resources import template
+from aidlc.resources import plugin_root, template
 
 EXIT = {"completed": 0, "awaiting_approval": 3, "awaiting_permission": 3, "changes_requested": 1, "failed": 1}
 ORG_FILES = ("guardrails.yaml", "models.yaml", PROJECT_FILE, "conventions.md")
@@ -256,6 +257,12 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
     for name in cfg.models.get("stages", {}):
         choice = models.resolve(cfg, name)
         print(f"     {name:<9} -> {choice.tier}: {choice.provider}:{choice.model}")
+    for provider, caps in CAPABILITIES.items():
+        print(f"     {provider:<9} " + ", ".join(f"{k}: {'yes' if v else 'no'}" for k, v in caps.items()))
+    manifest = plugin_root() / ".claude-plugin" / "plugin.json"
+    if manifest.exists() and (plugin := json.loads(manifest.read_text()).get("version")) != __version__:
+        ok = False
+        print(f"ERR plugin {plugin} and aidlc CLI {__version__} differ; reinstall with scripts/install.sh")
     return 0 if ok else 1
 
 

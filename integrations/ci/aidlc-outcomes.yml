@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
-      - run: pip install "git+https://github.com/zeeshah24/aidlc-plugin#subdirectory=orchestrator"
+      - run: pip install "git+https://github.com/zeeshah24/aidlc-plugin@${{ vars.AIDLC_REF || 'main' }}#subdirectory=orchestrator"  # pin AIDLC_REF to a release tag
       - name: Collect outcomes
         env:
           GH_TOKEN: ${{ github.token }}

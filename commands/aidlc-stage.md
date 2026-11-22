@@ -5,8 +5,8 @@ allowed-tools: Bash(aidlc:*), Read
 ---
 Stages: intake, analyze, plan, test, implement, verify, review, scan, pr, report.
 
-If `$ARGUMENTS` is a single stage name run `aidlc run --stage $ARGUMENTS --headless`, otherwise
-`aidlc run $ARGUMENTS --headless`. Stages run against the current run when one exists, or the current
+If `$ARGUMENTS` is a single stage name run `aidlc run --stage $ARGUMENTS`, otherwise
+`aidlc run $ARGUMENTS`. Stages run against the current run when one exists, or the current
 checkout (`--adhoc`) for stages that need no earlier artifacts (review, scan, report).
 If a stage reports missing prerequisites, tell the user which earlier stage to run.
 Summarize the stage outcome and link the artifact it produced.

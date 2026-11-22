@@ -6,12 +6,13 @@ import json
 import os
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
 from aidlc.util import now_iso
 
 STATE_FILE = "state.json"
+STATE_SCHEMA = 2  # bump with a migration in RunState.load when the layout changes
 
 
 @dataclass
@@ -47,7 +48,8 @@ class RunState:
     feedback: list[str] = field(default_factory=list)
     history: list[dict] = field(default_factory=list)
     owned_paths: dict[str, str] = field(default_factory=dict)
-    rating: int | None = None  # developer's 1-5 rating of the run  # path -> content hash left by this run's agents
+    rating: int | None = None  # developer's 1-5 rating of the run
+    schema: int = STATE_SCHEMA
 
     def stage(self, name: str) -> StageRecord:
         return self.stages.setdefault(name, StageRecord())
@@ -62,6 +64,13 @@ class RunState:
     @classmethod
     def load(cls, run_dir: Path) -> RunState:
         data = json.loads((run_dir / STATE_FILE).read_text())
+        if data.get("schema", 1) > STATE_SCHEMA:
+            raise SystemExit(f"aidlc: {run_dir.name} was written by a newer aidlc (state schema {data['schema']})")
+        data["schema"] = STATE_SCHEMA
+        known = {f.name for f in fields(StageRecord)}
+        for rec in data.get("stages", {}).values():
+            for key in set(rec) - known:
+                rec.pop(key)
         data["stages"] = {k: StageRecord(**v) for k, v in data.get("stages", {}).items()}
         return cls(**data)
 

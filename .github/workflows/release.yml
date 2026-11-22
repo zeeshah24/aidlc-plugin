@@ -1,0 +1,26 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write        # PyPI trusted publishing and build provenance
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Tag, CLI and plugin versions must match
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          grep -q "__version__ = \"$v\"" orchestrator/src/aidlc/__init__.py
+          grep -q "\"version\": \"$v\"" .claude-plugin/plugin.json
+      - run: pip install build==1.2.2 && python -m build orchestrator
+      - uses: actions/attest-build-provenance@v1
+        with: {subject-path: "orchestrator/dist/*"}
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with: {packages-dir: orchestrator/dist}

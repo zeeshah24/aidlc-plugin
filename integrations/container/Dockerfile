@@ -1,6 +1,6 @@
 # Isolated runtime for AI-DLC agents. Build from the plugin repo root:
 #   docker build -t aidlc-agent -f integrations/container/Dockerfile .
-# Pin the CLI versions (and ideally the base image digest) in your org's build.
+# Agent CLI versions are pinned below; also pin the base image digest in your org's build.
 FROM python:3.12-slim
 
 # Claude Code and Codex need Node 22+, newer than Debian ships.
@@ -9,8 +9,9 @@ COPY --from=node:22-bookworm-slim /usr/local/lib/node_modules /usr/local/lib/nod
 RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
  && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 
-ARG CLAUDE_CODE_VERSION=latest
-ARG CODEX_VERSION=latest
+# Tested versions; bump deliberately (agent CLI changes can change guard/hook behaviour).
+ARG CLAUDE_CODE_VERSION=2.1.330
+ARG CODEX_VERSION=0.171.0
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends git ca-certificates gh \

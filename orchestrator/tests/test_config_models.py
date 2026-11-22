@@ -92,3 +92,33 @@ def test_project_cannot_relax_org_isolation(repo: Path):
     (repo / "aidlc.yaml").write_text(yaml.safe_dump(data))
     cfg = load_config(repo)
     assert cfg.get("harness.require_isolation") is True and any("isolation" in w for w in cfg.warnings)
+
+
+def test_unknown_and_mistyped_keys_warn(repo: Path):
+    import yaml
+
+    data = yaml.safe_load((repo / "aidlc.yaml").read_text())
+    data["pipline"] = {"max_loops": 1}
+    data["pr"] = "yes"
+    (repo / "aidlc.yaml").write_text(yaml.safe_dump(data))
+    warnings = load_config(repo).warnings
+    assert any("unknown key 'pipline'" in w for w in warnings)
+    assert any("'pr' must be a mapping" in w for w in warnings)
+
+
+def test_state_from_newer_schema_is_refused_and_unknown_fields_dropped(tmp_path: Path):
+    import json
+
+    import pytest
+
+    from aidlc.state import RunState
+
+    RunState("r", "R-1", "t", "s", "main", "abc", "b", str(tmp_path)).save(tmp_path)
+    data = json.loads((tmp_path / "state.json").read_text())
+    data["stages"] = {"verify": {"status": "passed", "future_field": 1}}
+    (tmp_path / "state.json").write_text(json.dumps(data))
+    assert RunState.load(tmp_path).stages["verify"].status == "passed"
+    data["schema"] = 99
+    (tmp_path / "state.json").write_text(json.dumps(data))
+    with pytest.raises(SystemExit, match="newer aidlc"):
+        RunState.load(tmp_path)
