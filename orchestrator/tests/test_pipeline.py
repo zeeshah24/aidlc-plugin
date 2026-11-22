@@ -160,6 +160,10 @@ def test_human_gate_pauses_and_resumes(repo: Path, requirement: Path):
     assert pipe2.execute(state, paths, stages.select(), skip_passed=True) == "completed"
     assert "analyze" in state.approvals
 
+    pipe3, _ = pipeline(repo, Script(), headless=True)
+    state, paths = pipe3.open(pipe3.current_run_id())
+    assert pipe3.execute(state, paths, stages.select(stage="analyze")) == "awaiting_approval"
+
 
 def test_missing_prerequisite_fails_fast(repo: Path):
     pipe, fake = pipeline(repo, Script())

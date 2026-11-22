@@ -187,6 +187,8 @@ class Pipeline:
 
                 if outcome.status in ("passed", "skipped"):
                     rec.status = outcome.status
+                    if name in gates and name in state.approvals and name not in self.options.approve:
+                        state.approvals.remove(name)  # a regenerated artifact needs a fresh approval
                     gated = outcome.status == "passed" and name in gates and name not in state.approvals
                     if gated and not self.approve_gate(name, state, paths):
                         rec.status = "awaiting_approval"
