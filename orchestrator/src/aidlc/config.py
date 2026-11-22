@@ -136,9 +136,11 @@ def load_config(root: Path) -> Config:
             warnings.append(f"telemetry: set by org policy; project keys ignored {ignored}")
     org_harness = load_yaml(org / PROJECT_FILE).get("harness") or {}
     local_harness = local.get("harness") or {}
-    if org_harness.get("require_isolation") and local_harness.get("require_isolation", True) is not True:
-        local["harness"] = {k: v for k, v in local["harness"].items() if k != "require_isolation"}
-        warnings.append("harness: project cannot relax org harness.require_isolation")
+    if org_harness.get("require_isolation"):
+        relaxed = local_harness.get("require_isolation", True) is not True or "isolated" in local_harness
+        if relaxed:  # under org policy only the runtime (AIDLC_ISOLATED) or the org may assert isolation
+            local["harness"] = {k: v for k, v in local_harness.items() if k not in ("require_isolation", "isolated")}
+            warnings.append("harness: project cannot relax org harness.require_isolation or set harness.isolated")
     project = deep_merge(project, {k: v for k, v in local.items() if k not in ("models", "guardrails")})
     models = deep_merge(models, local.get("models", {}))
     guardrails, rail_warnings = merge_guardrails(guardrails, local.get("guardrails", {}))
