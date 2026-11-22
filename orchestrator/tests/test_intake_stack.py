@@ -17,6 +17,8 @@ def test_markdown_frontmatter_and_heading(tmp_path: Path):
     evil = tmp_path / "evil.md"
     evil.write_text("---\nid: ../../README\n---\n# x\n")
     assert intake.from_file(evil).req_id == "readme"
+    evil.write_text("---\nid: " + "a" * 101 + "\n---\n# x\n")
+    assert len(intake.from_file(evil).req_id) == 100
     with pytest.raises(ValueError):
         intake.write_requirement(intake.Requirement("../x", "t", "b", "s"), tmp_path / ".aidlc")
     out = intake.write_requirement(intake.from_file(a), tmp_path / ".aidlc")

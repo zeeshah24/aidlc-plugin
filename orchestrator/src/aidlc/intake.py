@@ -38,7 +38,7 @@ def from_file(path: Path) -> Requirement:
     found = re.search(r"\b[A-Z][A-Z0-9]+-\d+\b", heading)
     req_id = str(meta.get("id") or (found.group(0) if found else slugify(path.stem)))
     if not SAFE_ID.match(req_id) or ".." in req_id:
-        req_id = slugify(req_id)
+        req_id = slugify(req_id)[:100].rstrip("-") or "req"
     title = str(meta.get("title") or heading)
     return Requirement(req_id, title, text, f"file:{path}")
 
