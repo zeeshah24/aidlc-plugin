@@ -6,8 +6,10 @@ in interactive runs. Every request and decision is written to the run's audit lo
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
+from collections.abc import Iterator
 from pathlib import Path
 
 from aidlc.harness import AuditLog
@@ -26,14 +28,29 @@ def _save(run_dir: Path, items: list[dict]) -> None:
     (run_dir / FILE).write_text(json.dumps(items, indent=2) + "\n")
 
 
+@contextlib.contextmanager
+def _locked(run_dir: Path) -> Iterator[None]:
+    """Serialise read-modify-write of the request file across concurrent guard hooks."""
+    try:
+        import fcntl
+    except ImportError:  # Windows: no flock; hooks there run without the lock
+        yield
+        return
+    with (run_dir / f"{FILE}.lock").open("a") as fh:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(fh, fcntl.LOCK_UN)
+
+
 def request_id(subject: str) -> str:
     return hashlib.sha256(subject.encode()).hexdigest()[:8]
 
 
-def check(
+def _check(
     run_dir: Path, subject: str, stage: str, tool: str, reason: str, interactive: bool, audit: AuditLog
 ) -> tuple[bool, str]:
-    """Return (allowed, message) for an ask-tier action, recording a request when needed."""
     if not interactive:
         return False, f"{reason} (needs developer approval, which headless runs never grant)"
     items = load(run_dir)
@@ -69,11 +86,29 @@ def check(
     )
 
 
+def check(
+    run_dir: Path, subject: str, stage: str, tool: str, reason: str, interactive: bool, audit: AuditLog
+) -> tuple[bool, str]:
+    """Return (allowed, message) for an ask-tier action, recording a request when needed."""
+    with _locked(run_dir):
+        return _check(run_dir, subject, stage, tool, reason, interactive, audit)
+
+
+def decide(run_dir: Path, rid: str, choice: str, actor: str = "human") -> dict:
+    with _locked(run_dir):
+        return _decide(run_dir, rid, choice, actor)
+
+
+def expire(run_dir: Path, stage: str) -> None:
+    with _locked(run_dir):
+        _expire(run_dir, stage)
+
+
 def pending(run_dir: Path, stage: str | None = None) -> list[dict]:
     return [i for i in load(run_dir) if i["status"] == "pending" and stage in (None, i["stage"])]
 
 
-def decide(run_dir: Path, rid: str, choice: str, actor: str = "human") -> dict:
+def _decide(run_dir: Path, rid: str, choice: str, actor: str = "human") -> dict:
     items = load(run_dir)
     item = next((i for i in items if i["id"] == rid and i["status"] == "pending"), None)
     if item is None:
@@ -86,7 +121,7 @@ def decide(run_dir: Path, rid: str, choice: str, actor: str = "human") -> dict:
     return item
 
 
-def expire(run_dir: Path, stage: str) -> None:
+def _expire(run_dir: Path, stage: str) -> None:
     items = load(run_dir)
     for i in items:
         if i["status"] == "pending" and i["stage"] == stage:

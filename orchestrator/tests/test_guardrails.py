@@ -124,3 +124,18 @@ def test_agent_settings_deny_secret_reads(repo: Path, tmp_path: Path):
     settings = json.loads(hook_settings(paths, load_config(repo).guardrails).read_text())
     deny = settings["permissions"]["deny"]
     assert "Read(**/.env)" in deny and "Read(**/*.pem)" in deny and "Edit(.github/workflows/**)" in deny
+
+
+def test_allow_once_is_single_use_under_concurrency(tmp_path: Path):
+    from concurrent.futures import ThreadPoolExecutor
+
+    from aidlc import permissions
+    from aidlc.harness import AuditLog
+
+    audit = AuditLog(tmp_path / "audit.jsonl")
+    args = (tmp_path, "command:make gen", "implement", "Bash", "not allowlisted", True, audit)
+    permissions.check(*args)
+    permissions.decide(tmp_path, permissions.request_id("command:make gen"), "once")
+    with ThreadPoolExecutor(8) as pool:
+        results = list(pool.map(lambda _: permissions.check(*args)[0], range(8)))
+    assert results.count(True) == 1
