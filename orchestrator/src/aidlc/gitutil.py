@@ -46,7 +46,9 @@ def dirty_paths(cwd: Path) -> list[str]:
         path = line[3:]
         if " -> " in path:
             path = path.split(" -> ", 1)[1]
-        paths.append(path.strip('"'))
+        path = path.strip('"')
+        if not path.startswith(".aidlc/"):
+            paths.append(path)
     return paths
 
 
@@ -62,7 +64,7 @@ def diff(cwd: Path, base: str) -> str:
 def commit_all(cwd: Path, message: str, name: str, email: str) -> str | None:
     if not dirty_paths(cwd):
         return None
-    git(["add", "-A"], cwd)
+    git(["add", "-A", "--", ".", ":(exclude).aidlc"], cwd)
     git(["-c", f"user.name={name}", "-c", f"user.email={email}", "commit", "-q", "-m", message], cwd)
     return head_sha(cwd)
 

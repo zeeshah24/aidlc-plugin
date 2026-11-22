@@ -169,6 +169,15 @@ def test_missing_prerequisite_fails_fast(repo: Path):
     assert not fake.calls
 
 
+def test_in_place_writes_refuse_dirty_checkout(repo: Path):
+    (repo / "wip.py").write_text("x = 1\n")
+    pipe, fake = pipeline(repo, Script())
+    state, paths = pipe.start_adhoc()
+    with pytest.raises(PipelineError, match="uncommitted"):
+        pipe.execute(state, paths, stages.select(stage="implement"))
+    assert (repo / "wip.py").exists() and not fake.calls
+
+
 def test_unavailable_provider_is_reported(repo: Path, requirement: Path):
     pipe = Pipeline(load_config(repo), {}, RunOptions(), out=lambda _m: None)
     state, paths = pipe.start(intake.from_file(requirement))

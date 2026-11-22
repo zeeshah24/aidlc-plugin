@@ -144,6 +144,12 @@ class Pipeline:
         by_name = {s.name: s for s in stages}
         gates = set(self.cfg.get("pipeline.human_gates", []) or [])
         max_loops = int(self.cfg.get("pipeline.max_loops", 3))
+        writes = {"test", "implement"} & set(names)
+        if writes and Path(state.workdir).resolve() == self.cfg.root.resolve() and gitutil.dirty_paths(self.cfg.root):
+            raise PipelineError(
+                f"stages {', '.join(sorted(writes))} would discard uncommitted changes in this checkout; "
+                "commit or stash them first"
+            )
         state.status = "running"
         i = 0
         try:
