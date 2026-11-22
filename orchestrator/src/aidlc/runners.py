@@ -153,10 +153,13 @@ def is_test(path: str, globs: list[str]) -> bool:
 
 
 def discard(ctx: StageContext, paths: list[str]) -> None:
-    tracked = set(gitutil.git(["ls-files"], ctx.workdir).splitlines())
-    gitutil.restore(ctx.workdir, "HEAD", [p for p in paths if p in tracked])
-    for p in paths:
-        if p not in tracked and (ctx.workdir / p).is_file():
+    in_head = set(gitutil.git(["ls-tree", "-r", "--name-only", "HEAD"], ctx.workdir).splitlines())
+    gitutil.restore(ctx.workdir, "HEAD", [p for p in paths if p in in_head])
+    new = [p for p in paths if p not in in_head]
+    if new:  # untracked or staged-but-new: drop from the index too, there is no HEAD version to restore
+        gitutil.git(["rm", "-q", "--cached", "--ignore-unmatch", "--", *new], ctx.workdir)
+    for p in new:
+        if (ctx.workdir / p).is_file():
             (ctx.workdir / p).unlink()
 
 
