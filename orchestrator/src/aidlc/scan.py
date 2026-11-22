@@ -49,7 +49,8 @@ class ScanResult:
 
 
 def tracked_files(root: Path) -> list[str]:
-    return [f for f in gitutil.git(["ls-files"], root).splitlines() if (root / f).is_file()]
+    out = gitutil.git(["ls-files", "--cached", "--others", "--exclude-standard"], root)
+    return [f for f in out.splitlines() if (root / f).is_file()]
 
 
 def _is_test(path: str, globs: list[str]) -> bool:
