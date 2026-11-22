@@ -98,3 +98,44 @@ def test_test_env_excludes_model_credentials(repo: Path, tmp_path: Path, monkeyp
     paths = RunPaths(repo, tmp_path / "run", repo)
     assert "ANTHROPIC_API_KEY" in scoped_env(cfg, paths, "implement")
     assert "ANTHROPIC_API_KEY" not in scoped_env(cfg, paths, "tests")
+
+
+def test_ask_tier_commands(rails):
+    ask = check_command("terraform plan", rails)
+    assert not ask.allowed and ask.ask and ask.subject == "command:terraform plan"
+    assert not check_command("git push origin main", rails).ask
+    assert not check_command("terraform plan && git push", rails).ask  # deny always wins
+    strict = {**rails, "commands": {**rails["commands"], "unlisted": "deny"}}
+    assert not check_command("terraform plan", strict).ask
+
+
+def test_ask_tier_writes(rails, repo: Path):
+    rails = {**rails, "paths": {**rails["paths"], "ask": ["**/pyproject.toml"]}}
+    decision = check_write("pyproject.toml", rails, repo)
+    assert decision.ask and decision.subject == "write:pyproject.toml"
+    assert not check_write(".github/workflows/ci.yml", rails, repo).ask
+
+
+def test_agent_settings_deny_secret_reads(repo: Path, tmp_path: Path):
+    from aidlc.harness import RunPaths, hook_settings
+
+    paths = RunPaths(repo, tmp_path / "run", repo)
+    paths.run_dir.mkdir()
+    settings = json.loads(hook_settings(paths, load_config(repo).guardrails).read_text())
+    deny = settings["permissions"]["deny"]
+    assert "Read(**/.env)" in deny and "Read(**/*.pem)" in deny and "Edit(.github/workflows/**)" in deny
+
+
+def test_allow_once_is_single_use_under_concurrency(tmp_path: Path):
+    from concurrent.futures import ThreadPoolExecutor
+
+    from aidlc import permissions
+    from aidlc.harness import AuditLog
+
+    audit = AuditLog(tmp_path / "audit.jsonl")
+    args = (tmp_path, "command:make gen", "implement", "Bash", "not allowlisted", True, audit)
+    permissions.check(*args)
+    permissions.decide(tmp_path, permissions.request_id("command:make gen"), "once")
+    with ThreadPoolExecutor(8) as pool:
+        results = list(pool.map(lambda _: permissions.check(*args)[0], range(8)))
+    assert results.count(True) == 1

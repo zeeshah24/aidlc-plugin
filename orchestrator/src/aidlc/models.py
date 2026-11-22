@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 
 from aidlc.config import Config
@@ -30,6 +31,21 @@ def resolve(cfg: Config, stage: str) -> ModelChoice:
     tier = spec.get("tier", "custom")
     base = tiers.get(tier, {})
     return ModelChoice(tier, spec.get("provider", base.get("provider")), spec.get("model", base.get("model")))
+
+
+WRITABLE_STAGES = ("test", "implement")
+
+
+def isolation_errors(cfg: Config, stages: list[str]) -> list[str]:
+    """Writing stages may only use Codex (no pre-tool hooks) inside an isolated runtime."""
+    if cfg.get("harness.isolated") or os.environ.get("AIDLC_ISOLATED") == "1":
+        return []
+    return [
+        f"stage '{stage}' routes to codex, which has no pre-tool guard hooks; route it to claude "
+        "or run agents in the aidlc container (harness.isolated)"
+        for stage in stages
+        if stage in WRITABLE_STAGES and resolve(cfg, stage).provider == "codex"
+    ]
 
 
 def validate(cfg: Config) -> list[str]:

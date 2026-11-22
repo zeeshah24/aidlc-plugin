@@ -9,6 +9,10 @@ prompt_rules:
   - Do not modify locked red tests, CI workflows, or anything under .aidlc/.
   - Do not commit, push, open PRs or call network services; the orchestrator does that.
 commands:
+  # Tiers: deny (never overridable mid-run) > allow > ask. `unlisted: ask` lets a developer approve
+  # commands outside the allowlist in interactive runs; headless/CI runs always deny them.
+  unlisted: ask
+  ask: []
   allow:
     - "git status*"
     - "git diff*"
@@ -94,6 +98,7 @@ paths:
     - "**/*.pem"
     - "**/*.key"
     - "**/secrets/**"
+  ask: []                 # writes needing developer approval, e.g. ["**/pyproject.toml", "**/package.json"]
   no_read:                # secrets the Read/Grep/Glob tools may not open
     - ".env"
     - "**/.env"

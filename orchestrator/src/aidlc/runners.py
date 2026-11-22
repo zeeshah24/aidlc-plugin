@@ -39,6 +39,7 @@ class StageContext:
     paths: RunPaths
     adapters: dict[str, AgentAdapter]
     audit: AuditLog
+    interactive: bool = False  # a developer can answer ask-tier guardrail requests
 
     @property
     def workdir(self) -> Path:
@@ -83,8 +84,8 @@ def call_agent(ctx: StageContext, stage: str, prompt: str, writable: bool) -> Ag
         choice.model,
         ctx.workdir,
         writable,
-        env=harness.scoped_env(ctx.cfg, ctx.paths, stage),
-        settings_file=harness.hook_settings(ctx.paths),
+        env=harness.scoped_env(ctx.cfg, ctx.paths, stage) | ({"AIDLC_INTERACTIVE": "1"} if ctx.interactive else {}),
+        settings_file=harness.hook_settings(ctx.paths, ctx.cfg.guardrails),
         timeout_s=int(ctx.cfg.get("pipeline.agent_timeout_s", 1800)),
     )
     (ctx.paths.run_dir / "prompts").mkdir(exist_ok=True)

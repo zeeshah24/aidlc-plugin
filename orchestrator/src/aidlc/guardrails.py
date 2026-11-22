@@ -3,6 +3,9 @@
 Used in two ways:
 * ``aidlc guard pre-tool`` / ``post-tool`` as Claude Code hooks (JSON on stdin, exit 2 = block);
 * directly by the orchestrator for post-hoc checks on agents that do not support hooks.
+
+Three tiers: deny (never overridable during a run), ask (a developer may approve it in an interactive
+run; headless runs deny it), allow.
 """
 
 from __future__ import annotations
@@ -16,6 +19,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from aidlc import permissions
 from aidlc.config import load_config
 from aidlc.harness import AuditLog
 
@@ -28,6 +32,8 @@ _SEGMENT_SPLIT = re.compile(r"\s*(?:&&|\|\||;|\||\n)\s*")
 class Decision:
     allowed: bool
     reason: str = ""
+    ask: bool = False  # ask-tier: a developer may approve it
+    subject: str = ""  # what an approval covers, e.g. "command:<cmd>" or "write:<path>"
 
 
 def _match(value: str, patterns: list[str]) -> str | None:
@@ -82,25 +88,37 @@ def _install_targets(segment: str) -> list[tuple[str, str | None]]:
 
 def check_command(command: str, guardrails: dict, run_dir: Path | None = None) -> Decision:
     cmd_cfg = guardrails.get("commands", {})
-    deny = _match(command.strip(), cmd_cfg.get("deny", []))
+    command = command.strip()
+    deny_rules = cmd_cfg.get("deny", [])
+    deny = _match(command, deny_rules)
     if deny:
         return Decision(False, f"command matches deny rule '{deny}'")
+    segments = [s for s in _SEGMENT_SPLIT.split(command) if s]
+    for segment in segments:
+        if _match(segment, deny_rules):
+            return Decision(False, f"'{segment}' matches a deny rule")
     approved = approved_packages(run_dir)
     installs = guardrails.get("dependencies", {}).get("install_commands", [])
-    for segment in filter(None, _SEGMENT_SPLIT.split(command.strip())):
-        if _match(segment, cmd_cfg.get("deny", [])):
-            return Decision(False, f"'{segment}' matches a deny rule")
+    unlisted_ask = cmd_cfg.get("unlisted", "deny") == "ask"
+    asks: list[str] = []
+    for segment in segments:
         pkgs = _install_targets(segment) if _match(segment, installs) else []
         if pkgs:
             missing = [n for n, _ in pkgs if n not in approved]
             if missing:
-                return Decision(False, f"dependency install not approved in the plan's dependency gate: {missing}")
+                asks.append(f"dependency install not approved in the plan's dependency gate: {missing}")
+                continue
             wrong = [f"{n} (approved {approved[n]})" for n, v in pkgs if approved[n] and v != approved[n]]
             if wrong:
-                return Decision(False, f"install must pin the approved version: {', '.join(wrong)}")
+                asks.append(f"install must pin the approved version: {', '.join(wrong)}")
             continue
-        if not _match(segment, cmd_cfg.get("allow", [])):
+        if _match(segment, cmd_cfg.get("allow", [])):
+            continue
+        if not (unlisted_ask or _match(segment, cmd_cfg.get("ask", []))):
             return Decision(False, f"'{segment}' is not in the command allowlist")
+        asks.append(f"'{segment}' is not in the command allowlist")
+    if asks:
+        return Decision(False, "; ".join(asks), ask=True, subject=f"command:{command}")
     return Decision(True)
 
 
@@ -118,6 +136,9 @@ def check_write(file_path: str, guardrails: dict, jail: Path, run_dir: Path | No
         return Decision(False, f"{rel} is protected by '{rule}'")
     if rel in locked_paths(run_dir):
         return Decision(False, f"{rel} is a locked red test; make the implementation satisfy it instead")
+    rule = _match(rel, guardrails.get("paths", {}).get("ask", []))
+    if rule:
+        return Decision(False, f"writing {rel} needs developer approval ('{rule}')", ask=True, subject=f"write:{rel}")
     return Decision(True)
 
 
@@ -169,6 +190,17 @@ def hook_main(event: str) -> int:
         return 0
     cfg = load_config(Path(os.environ.get("AIDLC_PROJECT_ROOT") or jail))
     decision = evaluate(tool, tool_input, cfg.guardrails, jail, run_dir)
+    if decision.ask:
+        ok, message = permissions.check(
+            run_dir,
+            decision.subject,
+            os.environ.get("AIDLC_STAGE", ""),
+            tool,
+            decision.reason,
+            os.environ.get("AIDLC_INTERACTIVE") == "1",
+            audit,
+        )
+        decision = Decision(ok, message or decision.reason)
     audit.log(
         "tool.allowed" if decision.allowed else "tool.blocked",
         tool=tool,

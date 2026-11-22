@@ -47,3 +47,26 @@ def test_explicit_route_and_cost(repo: Path):
     assert (choice.provider, choice.model) == ("codex", "gpt-5")
     assert models.estimate_cost(cfg, "fake-reason", 1_000_000, 500_000) == 20.0
     assert models.estimate_cost(cfg, "unknown", 10, 10) == 0.0
+
+
+def test_project_cannot_relax_ask_tier():
+    base = {"commands": {"allow": ["ls*"], "deny": [], "unlisted": "deny", "ask": ["make *"]}, "paths": {}}
+    override = {"commands": {"unlisted": "ask", "ask": ["make *", "terraform *"]}, "paths": {"ask": ["db/**"]}}
+    merged, warnings = merge_guardrails(base, override)
+    assert merged["commands"]["unlisted"] == "deny"
+    assert merged["commands"]["ask"] == ["make *"]
+    assert merged["paths"]["ask"] == ["db/**"]
+    assert len(warnings) == 2
+    tightened, _ = merge_guardrails({"commands": {"unlisted": "ask"}}, {"commands": {"unlisted": "deny"}})
+    assert tightened["commands"]["unlisted"] == "deny"
+
+
+def test_codex_writers_need_isolation(repo: Path, monkeypatch):
+    monkeypatch.delenv("AIDLC_ISOLATED", raising=False)
+    cfg = load_config(repo)
+    cfg.models["tiers"]["coding"] = {"provider": "codex", "model": "gpt-x"}
+    assert not any("pre-tool" in e for e in models.validate(cfg))  # read-only commands still work
+    assert models.isolation_errors(cfg, ["review"]) == []
+    assert "implement" in models.isolation_errors(cfg, ["implement"])[0]
+    monkeypatch.setenv("AIDLC_ISOLATED", "1")
+    assert models.isolation_errors(cfg, ["test", "implement"]) == []

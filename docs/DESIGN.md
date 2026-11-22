@@ -33,9 +33,11 @@ flowchart LR
 ## 3. Cross-cutting controls
 
 - **`guardrails.yaml`** — policy enforced at two levels: in the prompt and at the tool level (hooks and harness block disallowed actions, not just ask the model to avoid them).
+- **Action tiers** — every guarded action is `deny` (never overridable during a run; exceptions are reviewed org-policy changes), `ask` (an interactive developer may allow it once or for the run; headless runs deny it) or `allow`. Requests and decisions are audited and listed in the run report.
 - **Harness** — git worktree isolation per run, command allowlist, path jail, scoped tokens, and an append-only audit log.
 - **Gated dependency installs** — new dependencies are proposed in `plan.md` and checked for license, known CVEs, and approved registry before install.
 - **Layered conventions** — enterprise → org → repo → project conventions, with more specific layers overriding general ones.
+- **Isolated runtime** — command-text and path checks only see what an agent requests. For team use, agents run in a container (`integrations/container/`) that mounts only the repository, with egress limited to approved hosts and no cloud or deploy credentials. Write stages on agents without pre-tool hooks (Codex) require it.
 - **Least-privilege security** — each stage gets only the permissions it needs; agents cannot escalate privileges.
 - **Baseline-delta gating (brownfield)** — quality and security gates compare against the pre-change baseline, so only new issues introduced by the run block it.
 

@@ -4,9 +4,10 @@ from pathlib import Path
 import pytest
 import yaml
 
-from aidlc import intake, stages
+from aidlc import intake, permissions, stages
 from aidlc.adapters import AgentRequest, AgentResult, FakeAdapter
 from aidlc.config import load_config
+from aidlc.harness import AuditLog
 from aidlc.orchestrator import Pipeline, PipelineError, RunOptions
 
 SPEC = """# Spec: DEMO-1 Add numbers
@@ -205,3 +206,55 @@ def test_unavailable_provider_is_reported(repo: Path, requirement: Path):
     state, paths = pipe.start(intake.from_file(requirement))
     assert pipe.execute(state, paths, stages.select(end="analyze")) == "failed"
     assert "not available" in state.history[-1]["detail"]
+
+
+def _needs_permission(req: AgentRequest) -> str:
+    run_dir = Path(req.env["AIDLC_RUN_DIR"])
+    ok, msg = permissions.check(
+        run_dir,
+        "command:make gen",
+        req.stage,
+        "Bash",
+        "'make gen' is not in the command allowlist",
+        req.env.get("AIDLC_INTERACTIVE") == "1",
+        AuditLog(run_dir / "audit.jsonl"),
+    )
+    return write(req, "calc.py", IMPL) if ok else msg
+
+
+def test_permission_request_pauses_then_resumes(repo: Path, requirement: Path):
+    pipe, _ = pipeline(repo, Script(implement=[_needs_permission]))
+    state, paths = pipe.start(intake.from_file(requirement))
+    assert pipe.execute(state, paths, stages.select()) == "awaiting_permission"
+    assert state.stages["implement"].status == "awaiting_permission"
+    [req] = permissions.pending(paths.run_dir, "implement")
+    permissions.decide(paths.run_dir, req["id"], "run")
+    assert pipe.execute(state, paths, stages.select(), skip_passed=True) == "completed", state.history
+    report = paths.report_file.read_text()
+    assert "## Guardrail approvals" in report and "allowed_run" in report and "make gen" in report
+
+
+def test_permission_prompt_in_interactive_run(repo: Path, requirement: Path):
+    questions: list[str] = []
+    fake = FakeAdapter(Script(implement=[_needs_permission]))
+    ask = lambda q: questions.append(q) or "o"  # noqa: E731
+    pipe = Pipeline(load_config(repo), {"fake": fake}, RunOptions(), ask=ask, out=lambda _m: None)
+    state, paths = pipe.start(intake.from_file(requirement))
+    assert pipe.execute(state, paths, stages.select()) == "completed", state.history
+    assert len(questions) == 1 and "make gen" in questions[0]
+    assert [r["status"] for r in permissions.load(paths.run_dir)] == ["used"]
+
+
+def test_interactive_deny_fails_stage(repo: Path, requirement: Path):
+    fake = FakeAdapter(Script(implement=[_needs_permission]))
+    pipe = Pipeline(load_config(repo), {"fake": fake}, RunOptions(), ask=lambda _q: "n", out=lambda _m: None)
+    state, paths = pipe.start(intake.from_file(requirement))
+    assert pipe.execute(state, paths, stages.select()) == "failed"
+    assert [r["status"] for r in permissions.load(paths.run_dir)] == ["denied"]
+
+
+def test_headless_never_requests_permission(repo: Path, requirement: Path):
+    pipe, _ = pipeline(repo, Script(implement=[_needs_permission]), headless=True)
+    state, paths = pipe.start(intake.from_file(requirement))
+    assert pipe.execute(state, paths, stages.select()) == "failed"
+    assert permissions.load(paths.run_dir) == []

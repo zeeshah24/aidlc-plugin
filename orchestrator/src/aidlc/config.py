@@ -48,9 +48,16 @@ def merge_guardrails(base: dict, override: dict) -> tuple[dict, list[str]]:
     if "allow" in o_cmd:
         b_cmd["allow"] = _subset(b_cmd.get("allow", []), o_cmd["allow"], "commands.allow", warnings)
     b_cmd["deny"] = _union(b_cmd.get("deny", []), o_cmd.get("deny", []))
+    if "ask" in o_cmd:
+        b_cmd["ask"] = _subset(b_cmd.get("ask", []), o_cmd["ask"], "commands.ask", warnings)
+    if o_cmd.get("unlisted") == "deny":
+        b_cmd["unlisted"] = "deny"
+    elif o_cmd.get("unlisted") == "ask" and b_cmd.get("unlisted", "deny") != "ask":
+        warnings.append("guardrails: project cannot relax commands.unlisted to 'ask'")
 
     o_paths, b_paths = override.get("paths", {}), out.setdefault("paths", {})
     b_paths["protected"] = _union(b_paths.get("protected", []), o_paths.get("protected", []))
+    b_paths["ask"] = _union(b_paths.get("ask", []), o_paths.get("ask", []))
     b_paths["no_read"] = _union(b_paths.get("no_read", []), o_paths.get("no_read", []))
 
     o_dep, b_dep = override.get("dependencies", {}), out.setdefault("dependencies", {})
