@@ -23,9 +23,13 @@ COPY . /opt/aidlc-plugin
 # your project's own dependencies (FROM aidlc-agent ...) so its test suite can run.
 RUN pip install --no-cache-dir "/opt/aidlc-plugin/orchestrator[dev]"
 
+# git pushes to GitHub authenticate through gh with the forwarded GH_TOKEN.
 # AIDLC_ISOLATED tells aidlc it may route write stages to agents without pre-tool hooks (Codex).
 ENV AIDLC_ISOLATED=1 \
     AIDLC_PLUGIN_ROOT=/opt/aidlc-plugin \
-    HOME=/home/agent
+    HOME=/home/agent \
+    GIT_CONFIG_COUNT=1 \
+    GIT_CONFIG_KEY_0=credential.https://github.com.helper \
+    GIT_CONFIG_VALUE_0="!gh auth git-credential"
 
 ENTRYPOINT ["aidlc"]
