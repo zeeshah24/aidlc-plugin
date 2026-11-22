@@ -173,7 +173,7 @@ def cmd_outcomes(args: argparse.Namespace) -> int:
     from aidlc import telemetry
     from aidlc.util import now_iso
 
-    cfg = load_config(Path.cwd())
+    cfg = load_config(project_root())
     records = telemetry.pseudonymize(cfg, telemetry.fetch_outcomes(cfg.root, args.limit))
     for record in records:
         print(json.dumps(record, sort_keys=True))
