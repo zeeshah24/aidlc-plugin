@@ -36,6 +36,18 @@ def resolve(cfg: Config, stage: str) -> ModelChoice:
 WRITABLE_STAGES = ("test", "implement")
 
 
+def isolation_errors(cfg: Config, stages: list[str]) -> list[str]:
+    """Writing stages may only use Codex (no pre-tool hooks) inside an isolated runtime."""
+    if cfg.get("harness.isolated") or os.environ.get("AIDLC_ISOLATED") == "1":
+        return []
+    return [
+        f"stage '{stage}' routes to codex, which has no pre-tool guard hooks; route it to claude "
+        "or run agents in the aidlc container (harness.isolated)"
+        for stage in stages
+        if stage in WRITABLE_STAGES and resolve(cfg, stage).provider == "codex"
+    ]
+
+
 def validate(cfg: Config) -> list[str]:
     """Return config errors; enforces implementer != reviewer."""
     errors = []
@@ -46,17 +58,6 @@ def validate(cfg: Config) -> list[str]:
             errors.append(str(exc))
     if errors:
         return errors
-    isolated = bool(cfg.get("harness.isolated")) or os.environ.get("AIDLC_ISOLATED") == "1"
-    for stage in WRITABLE_STAGES:
-        try:
-            provider = resolve(cfg, stage).provider
-        except ModelConfigError:
-            continue
-        if not isolated and provider == "codex":
-            errors.append(
-                f"stage '{stage}' routes to codex, which has no pre-tool guard hooks; route it to claude "
-                "or run agents in the aidlc container (harness.isolated)"
-            )
     rules = cfg.models.get("rules", {})
     if rules.get("reviewer_must_differ_from_implementer", True):
         impl, rev = resolve(cfg, "implement"), resolve(cfg, "review")

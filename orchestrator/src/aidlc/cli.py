@@ -205,7 +205,7 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
         print(f"{'ok ' if shutil.which(tool) else '-- '} {tool}")
     isolated = bool(cfg.get("harness.isolated")) or os.environ.get("AIDLC_ISOLATED") == "1"
     print(f"{'ok ' if isolated else '-- '} isolated agent runtime (container/VM)")
-    for err in models.validate(cfg):
+    for err in models.validate(cfg) or models.isolation_errors(cfg, list(models.WRITABLE_STAGES)):
         ok = False
         print(f"ERR {err}")
     for w in cfg.warnings:

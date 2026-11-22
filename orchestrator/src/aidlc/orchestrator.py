@@ -174,6 +174,9 @@ class Pipeline:
                     rec.status = "passed"
                     i += 1
                     continue
+                unsafe = models.isolation_errors(self.cfg, [name])
+                if unsafe:
+                    raise PipelineError(unsafe[0])
                 missing = [a for a in stage.requires if a not in DERIVABLE and not self.present(a, state, paths)]
                 if missing:
                     raise PipelineError(

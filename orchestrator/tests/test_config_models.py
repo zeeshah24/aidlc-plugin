@@ -65,6 +65,8 @@ def test_codex_writers_need_isolation(repo: Path, monkeypatch):
     monkeypatch.delenv("AIDLC_ISOLATED", raising=False)
     cfg = load_config(repo)
     cfg.models["tiers"]["coding"] = {"provider": "codex", "model": "gpt-x"}
-    assert any("codex" in e and "implement" in e for e in models.validate(cfg))
+    assert not any("pre-tool" in e for e in models.validate(cfg))  # read-only commands still work
+    assert models.isolation_errors(cfg, ["review"]) == []
+    assert "implement" in models.isolation_errors(cfg, ["implement"])[0]
     monkeypatch.setenv("AIDLC_ISOLATED", "1")
-    assert not any("pre-tool" in e for e in models.validate(cfg))
+    assert models.isolation_errors(cfg, ["test", "implement"]) == []
