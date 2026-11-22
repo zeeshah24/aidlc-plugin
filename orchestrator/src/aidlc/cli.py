@@ -154,6 +154,46 @@ def cmd_permission(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_telemetry(args: argparse.Namespace) -> int:
+    from aidlc import telemetry
+
+    cfg, (state, paths) = _open(args)
+    record = telemetry.summary(cfg, state, paths)
+    if args.action == "show":
+        print(json.dumps(record, indent=2))
+        print(f"# export {'enabled' if telemetry.enabled(cfg) else 'disabled'} (telemetry.enabled)", file=sys.stderr)
+        return 0
+    if not telemetry.enabled(cfg):
+        raise PipelineError("telemetry is disabled; set telemetry.enabled in aidlc.yaml")
+    print(f"exported to {', '.join(telemetry.export_run(cfg, state, paths)) or 'no sink configured'}")
+    return 0
+
+
+def cmd_outcomes(args: argparse.Namespace) -> int:
+    from aidlc import telemetry
+    from aidlc.util import now_iso
+
+    cfg = load_config(Path.cwd())
+    records = telemetry.fetch_outcomes(cfg.root, args.limit)
+    for record in records:
+        print(json.dumps(record, sort_keys=True))
+    if args.export:
+        if not telemetry.enabled(cfg):
+            raise PipelineError("telemetry is disabled; set telemetry.enabled in aidlc.yaml")
+        now = now_iso()
+        sinks = telemetry.send(cfg, records, [telemetry.outcome_span(r, now) for r in records])
+        print(f"exported {len(records)} outcome(s) to {', '.join(sinks) or 'no sink configured'}", file=sys.stderr)
+    return 0
+
+
+def cmd_rate(args: argparse.Namespace) -> int:
+    _, (state, paths) = _open(args)
+    state.rating = args.score
+    state.save(paths.run_dir)
+    print(f"rated {state.run_id}: {args.score}/5")
+    return 0
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     _, (state, _paths) = _open(args)
     if args.json:
@@ -262,6 +302,21 @@ def build_parser() -> argparse.ArgumentParser:
         if verb == "allow":
             s.add_argument("--for-run", action="store_true", help="allow for the rest of the run, not just once")
         s.set_defaults(fn=cmd_permission, choice=verb, for_run=False)
+
+    s = sub.add_parser("telemetry", help="show or export the content-free telemetry record for a run")
+    s.add_argument("action", choices=["show", "export"])
+    s.add_argument("--run")
+    s.set_defaults(fn=cmd_telemetry)
+
+    s = sub.add_parser("outcomes", help="collect merge/review/revert outcomes of aidlc PRs from GitHub (gh)")
+    s.add_argument("--limit", type=int, default=200)
+    s.add_argument("--export", action="store_true", help="also send to the configured telemetry sinks")
+    s.set_defaults(fn=cmd_outcomes)
+
+    s = sub.add_parser("rate", help="rate a run 1-5 (included in the report and telemetry)")
+    s.add_argument("score", type=int, choices=range(1, 6))
+    s.add_argument("--run")
+    s.set_defaults(fn=cmd_rate)
 
     s = sub.add_parser("status", help="show run status")
     s.add_argument("--run")

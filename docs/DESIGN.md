@@ -39,6 +39,7 @@ flowchart LR
 - **Layered conventions** — enterprise → org → repo → project conventions, with more specific layers overriding general ones.
 - **Isolated runtime** — command-text and path checks only see what an agent requests. For team use, agents run in a container (`integrations/container/`) that mounts only the repository, with egress limited to approved hosts and no cloud or deploy credentials. Write stages on agents without pre-tool hooks (Codex) require it.
 - **Least-privilege security** — each stage gets only the permissions it needs; agents cannot escalate privileges.
+- **Telemetry (opt-in)** — content-free run records and OpenTelemetry traces go only to the adopter's own collector when enabled; `AIDLC-Run` trailers join runs with PR outcomes. See [TELEMETRY.md](TELEMETRY.md).
 - **Baseline-delta gating (brownfield)** — quality and security gates compare against the pre-change baseline, so only new issues introduced by the run block it.
 
 ## 4. Principles

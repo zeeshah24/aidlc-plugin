@@ -60,6 +60,13 @@ only reaches your model API, git host and registry; the default `bridge` network
 Codex has no pre-tool hooks, so `aidlc` refuses to route `test` or `implement` to Codex outside the container
 (or another runtime you mark with `harness.isolated: true`).
 
+## Telemetry and outcomes
+
+Runs are recorded locally. Export is off by default and goes only to your own OpenTelemetry collector or JSONL
+file when `telemetry.enabled` is set; records hold counts, durations, costs, models and outcomes, never prompts,
+code or command output. Commits and PRs carry an `AIDLC-Run: <run-id>` trailer, and `aidlc outcomes` joins
+runs with merge, review, rework and revert data from GitHub. See [docs/TELEMETRY.md](docs/TELEMETRY.md).
+
 ## Development
 
 ```bash
