@@ -10,6 +10,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import os
 import re
 import shlex
 import shutil
@@ -474,6 +475,10 @@ def sarif(tool: dict, root: Path) -> list[Finding]:
     return out
 
 
+EXTERNAL_TOOLS = ("pip-audit", "bandit", "vulture", "npm", "madge")
+API_FORMAT = 2  # bump when _signature changes, so cached baselines are rebuilt
+
+
 def run_scanners(root: Path, profile: dict, gate_cfg: dict) -> ScanResult:
     files = [f for f in tracked_files(root) if not f.startswith(".aidlc/")]
     test_globs = profile.get("test_globs", [])
@@ -538,12 +543,14 @@ def gate(
 ) -> dict:
     """Scan head and baseline; only findings new relative to the baseline can block."""
     cache_dir.mkdir(parents=True, exist_ok=True)
-    fingerprint = hashlib.sha256(json.dumps([__version__, gate_cfg, profile], sort_keys=True).encode()).hexdigest()[:12]
+    tools = {b: shutil.which(b) for b in EXTERNAL_TOOLS}  # a newly installed scanner needs a new baseline
+    key = json.dumps([__version__, API_FORMAT, gate_cfg, profile, tools], sort_keys=True)
+    fingerprint = hashlib.sha256(key.encode()).hexdigest()[:12]
     cache = cache_dir / f"scan-baseline-{base_sha[:12]}-{fingerprint}.json"
     if cache.exists():
         base = json.loads(cache.read_text())
     else:
-        tmp = cache_dir / f"base-{base_sha[:12]}"
+        tmp = cache_dir / f"base-{base_sha[:12]}-{os.getpid()}"  # per process: concurrent runs must not share it
         if tmp.exists():
             gitutil.git(["worktree", "remove", "--force", str(tmp)], repo, check=False)
         gitutil.git(["worktree", "add", "-q", "--detach", str(tmp), base_sha], repo)
@@ -553,7 +560,9 @@ def gate(
         finally:
             gitutil.git(["worktree", "remove", "--force", str(tmp)], repo, check=False)
         base = {"keys": sorted({f.key for f in res.findings}), "api": api}
-        cache.write_text(json.dumps(base))
+        part = cache.with_name(f".{cache.name}.{os.getpid()}.tmp")
+        part.write_text(json.dumps(base))
+        os.replace(part, cache)
 
     head = run_scanners(workdir, profile, gate_cfg)
     if "api_drift" in set(gate_cfg.get("analyzers", ["api_drift"])) and "python" in profile.get("languages", []):
