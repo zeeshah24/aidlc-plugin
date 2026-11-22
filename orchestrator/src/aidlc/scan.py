@@ -84,7 +84,16 @@ def circular_imports(root: Path, files: list[str]) -> list[Finding]:
         if tree is None:
             continue
         package = mod if rel.endswith("__init__.py") else mod.rpartition(".")[0]
+        type_only = {
+            id(n)
+            for guard in ast.walk(tree)
+            if isinstance(guard, ast.If) and "TYPE_CHECKING" in ast.unparse(guard.test)
+            for stmt in guard.body
+            for n in ast.walk(stmt)
+        }
         for node in ast.walk(tree):
+            if id(node) in type_only:
+                continue
             targets: list[str] = []
             if isinstance(node, ast.Import):
                 targets = [a.name for a in node.names]
