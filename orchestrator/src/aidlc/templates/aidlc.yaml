@@ -26,6 +26,7 @@ telemetry:                # opt-in; nothing leaves this machine unless enabled (
   include_developer: false
   ask_rating: true        # interactive runs ask for a 1-5 rating at the end
 harness:
+  require_isolation: true # test/implement run agent-written code; require the container (false: trusted local use)
   isolated: false         # true only when agents run in a container/VM (integrations/container sets AIDLC_ISOLATED=1)
 stack: {}                 # override detection, e.g. {test_command: "make test"}
 dependencies:

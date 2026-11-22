@@ -70,3 +70,25 @@ def test_codex_writers_need_isolation(repo: Path, monkeypatch):
     assert "implement" in models.isolation_errors(cfg, ["implement"])[0]
     monkeypatch.setenv("AIDLC_ISOLATED", "1")
     assert models.isolation_errors(cfg, ["test", "implement"]) == []
+
+
+def test_writers_need_isolation_by_default(repo: Path, monkeypatch):
+    monkeypatch.delenv("AIDLC_ISOLATED", raising=False)
+    cfg = load_config(repo)
+    cfg.models["tiers"]["coding"] = {"provider": "claude", "model": "claude-x"}
+    assert "container" in models.isolation_errors(cfg, ["implement"])[0]
+    cfg.project.setdefault("harness", {})["require_isolation"] = False
+    assert models.isolation_errors(cfg, ["implement"]) == []
+
+
+def test_project_cannot_relax_org_isolation(repo: Path):
+    import yaml
+
+    org = repo / ".aidlc" / "org"
+    org.mkdir(parents=True)
+    (org / "aidlc.yaml").write_text(yaml.safe_dump({"harness": {"require_isolation": True}}))
+    data = yaml.safe_load((repo / "aidlc.yaml").read_text())
+    data["harness"] = {"require_isolation": False}
+    (repo / "aidlc.yaml").write_text(yaml.safe_dump(data))
+    cfg = load_config(repo)
+    assert cfg.get("harness.require_isolation") is True and any("isolation" in w for w in cfg.warnings)

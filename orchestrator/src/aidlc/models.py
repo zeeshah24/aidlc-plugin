@@ -37,15 +37,28 @@ WRITABLE_STAGES = ("test", "implement")
 
 
 def isolation_errors(cfg: Config, stages: list[str]) -> list[str]:
-    """Writing stages may only use Codex (no pre-tool hooks) inside an isolated runtime."""
+    """Writing stages run agent-written code (tests, build scripts), so the command guard cannot contain
+    them; they need an isolated runtime. Codex always does (no pre-tool hooks); other providers unless
+    `harness.require_isolation` is false."""
     if cfg.get("harness.isolated") or os.environ.get("AIDLC_ISOLATED") == "1":
         return []
-    return [
-        f"stage '{stage}' routes to codex, which has no pre-tool guard hooks; route it to claude "
-        "or run agents in the aidlc container (harness.isolated)"
-        for stage in stages
-        if stage in WRITABLE_STAGES and resolve(cfg, stage).provider == "codex"
-    ]
+    required = cfg.get("harness.require_isolation", True)
+    errors = []
+    for stage in stages:
+        if stage not in WRITABLE_STAGES:
+            continue
+        provider = resolve(cfg, stage).provider
+        if provider == "codex":
+            errors.append(
+                f"stage '{stage}' routes to codex, which has no pre-tool guard hooks; route it to claude "
+                "or run agents in the aidlc container (harness.isolated)"
+            )
+        elif required and provider != "fake":
+            errors.append(
+                f"stage '{stage}' runs agent-written code; run it in the aidlc container "
+                "(scripts/aidlc-container.sh) or set harness.require_isolation: false for a trusted local setup"
+            )
+    return errors
 
 
 def validate(cfg: Config) -> list[str]:
