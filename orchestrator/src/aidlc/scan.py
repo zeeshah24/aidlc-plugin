@@ -102,6 +102,11 @@ def circular_imports(root: Path, files: list[str]) -> list[Finding]:
                     t = t.rpartition(".")[0]
                 if t and t != mod:
                     graph[mod].add(t)
+                    parent = t.rpartition(".")[0]
+                    while parent:  # importing pkg.sub runs pkg/__init__ first
+                        if parent in modules and parent != mod and not mod.startswith(parent + "."):
+                            graph[mod].add(parent)
+                        parent = parent.rpartition(".")[0]
     findings = []
     for scc in _sccs(graph):
         if len(scc) > 1:

@@ -27,6 +27,11 @@ def test_builtin_analyzers(tmp_path: Path):
     (tmp_path / "sib" / "x.py").write_text("from . import y\nX = 1\n")
     (tmp_path / "sib" / "y.py").write_text("")
     assert scan.circular_imports(tmp_path, ["sib/__init__.py", "sib/x.py", "sib/y.py"]) == []
+    (tmp_path / "ini").mkdir()
+    (tmp_path / "ini" / "__init__.py").write_text("import outer\n")
+    (tmp_path / "ini" / "sub.py").write_text("")
+    (tmp_path / "outer.py").write_text("import ini.sub\n")
+    assert scan.circular_imports(tmp_path, ["ini/__init__.py", "ini/sub.py", "outer.py"])
     assert [f.category for f in scan.circular_imports(tmp_path, files)] == ["circular_dependency"]
     assert [f.file for f in scan.complexity(tmp_path, files, 3)] == ["c.py"]
     api = scan.public_api(tmp_path, files, [])
