@@ -27,7 +27,26 @@ aidlc approve plan && aidlc run --resume   # continue after a human gate
 
 Standalone stages: `aidlc run --stage review`, `aidlc run --from verify --to scan`, `aidlc run --only test,implement`.
 CI: `aidlc run PROJ-123 --headless --approve analyze,plan` (see `integrations/ci/github-actions.yml`).
-In Claude Code, install this repo as a plugin and use `/aidlc-run PROJ-123`.
+
+## Install the plugin
+
+This repository is a plugin marketplace (`.claude-plugin/marketplace.json`) that Claude Code, GitHub Copilot CLI
+and Codex CLI all read. The plugin adds the `aidlc-*` commands, agents and guardrail hooks; it calls the `aidlc`
+CLI, so install that first (`scripts/install.sh`).
+
+| Assistant | Install | Use |
+|---|---|---|
+| Claude Code | `/plugin marketplace add zeeshah24/aidlc-plugin` then `/plugin install aidlc@aidlc-plugin` | `/aidlc-run PROJ-123` |
+| GitHub Copilot CLI | `copilot plugin marketplace add zeeshah24/aidlc-plugin` then `copilot plugin install aidlc@aidlc-plugin` | `/aidlc-run PROJ-123` |
+| Codex CLI | `codex plugin marketplace add zeeshah24/aidlc-plugin` then `codex plugin add aidlc@aidlc-plugin` | `$source-command-aidlc-run PROJ-123` (Codex turns plugin commands into skills) |
+| Copilot in VS Code | Command Palette: **Chat: Install Plugin from Source**, `https://github.com/zeeshah24/aidlc-plugin` | ask Copilot Chat (Agent mode) to run AI-DLC for a ticket |
+
+Add `--ref <tag>` (Codex) or `owner/repo#<tag>` (Copilot) to pin a release. For local development, Claude Code
+and Copilot CLI accept `--plugin-dir /path/to/aidlc-plugin`. Assistants without plugin support can use the
+instruction files in `integrations/` (`copilot/copilot-instructions.md`, `codex/AGENTS.md`).
+
+Whichever assistant starts the run, `aidlc` routes stage work to the providers in `models.yaml` (Claude Code or
+Codex CLI), so their CLIs and API keys are still required.
 
 Each run works on its own branch in `.aidlc/worktrees/<run-id>/`. It writes artifacts to `.aidlc/runs/<run-id>/`
 and a cost/time report to `.aidlc/reports/<run-id>.md`.

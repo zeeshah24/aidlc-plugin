@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 from aidlc.cli import main
 
@@ -152,3 +153,22 @@ def test_rate_updates_report(repo, requirement, monkeypatch):
     monkeypatch.chdir(repo / "tests")
     assert cli.main(["rate", "5", "--run", state.run_id]) == 0
     assert "Developer rating: 5/5" in paths.report_file.read_text()
+
+
+def test_marketplace_lists_root_plugin():
+    root = Path(__file__).resolve().parents[2] / ".claude-plugin"
+    manifest = json.loads((root / "plugin.json").read_text())
+    marketplace = json.loads((root / "marketplace.json").read_text())
+    assert marketplace["owner"]["name"]
+    assert [(p["name"], p["source"]) for p in marketplace["plugins"]] == [(manifest["name"], "./")]
+
+
+def test_commands_load_in_copilot_and_codex():
+    # Codex skips commands that use $ARGUMENTS; Copilot skips YAML front matter that is not a string map.
+    commands = sorted((Path(__file__).resolve().parents[2] / "commands").glob("*.md"))
+    assert commands
+    for path in commands:
+        text = path.read_text()
+        front = yaml.safe_load(text.split("---")[1])
+        assert all(isinstance(v, str) for v in front.values()), path.name
+        assert "$ARGUMENTS" not in text, path.name
