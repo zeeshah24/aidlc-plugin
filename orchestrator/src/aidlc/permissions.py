@@ -34,6 +34,8 @@ def check(
     run_dir: Path, subject: str, stage: str, tool: str, reason: str, interactive: bool, audit: AuditLog
 ) -> tuple[bool, str]:
     """Return (allowed, message) for an ask-tier action, recording a request when needed."""
+    if not interactive:
+        return False, f"{reason} (needs developer approval, which headless runs never grant)"
     items = load(run_dir)
     rid = request_id(subject)
     item = next((i for i in items if i["id"] == rid), None)
@@ -46,8 +48,6 @@ def check(
         return True, ""
     if status == "denied":
         return False, f"{reason} (denied by the developer)"
-    if not interactive:
-        return False, f"{reason} (needs developer approval, which headless runs never grant)"
     if status != "pending":
         items = [i for i in items if i["id"] != rid]
         items.append(

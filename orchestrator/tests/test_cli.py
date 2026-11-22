@@ -100,6 +100,10 @@ def test_guard_hook_ask_tier(repo: Path, tmp_path: Path):
     permissions.decide(run_dir, req["id"], "once")
     assert hook(AIDLC_INTERACTIVE="1").returncode == 0
     assert hook(AIDLC_INTERACTIVE="1").returncode == 2  # once means once
+    permissions.decide(run_dir, req["id"], "run")
+    assert hook().returncode == 2  # headless never uses stored allowances
+    assert hook(AIDLC_INTERACTIVE="1").returncode == 0
+    _reset_pending(run_dir, req["id"])
     permissions.decide(run_dir, req["id"], "deny")
     denied = hook(AIDLC_INTERACTIVE="1")
     assert denied.returncode == 2 and "denied by the developer" in denied.stderr
@@ -115,6 +119,15 @@ def test_guard_hook_ask_tier(repo: Path, tmp_path: Path):
         env=env | {"AIDLC_INTERACTIVE": "1"},
     )
     assert proc.returncode == 2 and len(permissions.load(run_dir)) == 1  # deny tier never asks
+
+
+def _reset_pending(run_dir: Path, rid: str) -> None:
+    path = run_dir / "permissions.json"
+    items = json.loads(path.read_text())
+    for item in items:
+        if item["id"] == rid:
+            item["status"] = "pending"
+    path.write_text(json.dumps(items))
 
 
 def test_guard_hook_noop_without_active_run(tmp_path: Path):
