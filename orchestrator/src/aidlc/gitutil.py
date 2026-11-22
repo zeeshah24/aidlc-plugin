@@ -58,7 +58,8 @@ def changed_since(cwd: Path, base: str) -> list[str]:
 
 
 def diff(cwd: Path, base: str) -> str:
-    return git(["diff", f"{base}...HEAD"], cwd)
+    """Committed and uncommitted changes since ``base`` (a merge-base of HEAD)."""
+    return git(["diff", base], cwd)
 
 
 def commit_all(cwd: Path, message: str, name: str, email: str) -> str | None:
