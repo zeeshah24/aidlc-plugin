@@ -1,2 +1,2 @@
 # aidlc-plugin
-this repo will create a aidlc plugin
+this repo to create a aidlc plugin
