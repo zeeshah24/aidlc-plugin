@@ -112,12 +112,11 @@ def load_config(root: Path) -> Config:
 
     local = load_yaml(root / PROJECT_FILE)
     warnings: list[str] = []
-    org_telemetry = load_yaml(org / PROJECT_FILE).get("telemetry")
-    if org_telemetry and "telemetry" in local:
+    if "telemetry" in load_yaml(org / PROJECT_FILE) and "telemetry" in local:
         # the org owns telemetry policy; a project may only switch it off
         requested = local.pop("telemetry") or {}
         if requested.get("enabled") is False:
-            project["telemetry"]["enabled"] = False
+            project["telemetry"] = {**(project.get("telemetry") or {}), "enabled": False}
         ignored = sorted(k for k in requested if k != "enabled" or requested[k] is not False)
         if ignored:
             warnings.append(f"telemetry: set by org policy; project keys ignored {ignored}")

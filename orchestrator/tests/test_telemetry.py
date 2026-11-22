@@ -165,3 +165,11 @@ def test_outcomes_join_prs_by_run_id():
     assert out["reverted"] and out["state"] == "merged"
     span = telemetry.outcome_span(out, "2026-11-22T00:00:00+00:00")
     assert span["traceId"] == telemetry.trace_id("20261120-abc")
+
+
+def test_empty_org_telemetry_policy_still_owns_settings(repo):
+    org = repo / ".aidlc" / "org"
+    org.mkdir(parents=True)
+    (org / "aidlc.yaml").write_text(yaml.safe_dump({"telemetry": {}}))
+    configure(repo, enabled=True, endpoint="https://elsewhere")
+    assert not telemetry.enabled(load_config(repo))
