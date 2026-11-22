@@ -17,7 +17,7 @@ import subprocess
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-from aidlc import gitutil
+from aidlc import __version__, gitutil
 from aidlc.util import glob_match
 
 SEVERITY = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
@@ -515,7 +515,7 @@ def gate(
 ) -> dict:
     """Scan head and baseline; only findings new relative to the baseline can block."""
     cache_dir.mkdir(parents=True, exist_ok=True)
-    fingerprint = hashlib.sha256(json.dumps([gate_cfg, profile], sort_keys=True).encode()).hexdigest()[:12]
+    fingerprint = hashlib.sha256(json.dumps([__version__, gate_cfg, profile], sort_keys=True).encode()).hexdigest()[:12]
     cache = cache_dir / f"scan-baseline-{base_sha[:12]}-{fingerprint}.json"
     if cache.exists():
         base = json.loads(cache.read_text())
