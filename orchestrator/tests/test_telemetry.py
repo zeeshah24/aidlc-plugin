@@ -183,3 +183,16 @@ def test_empty_org_telemetry_policy_still_owns_settings(repo):
     (org / "aidlc.yaml").write_text(yaml.safe_dump({"telemetry": {}}))
     configure(repo, enabled=True, endpoint="https://elsewhere")
     assert not telemetry.enabled(load_config(repo))
+
+
+def test_interrupted_rating_still_finalises_run(repo, requirement):
+    configure(repo, enabled=True)
+
+    def ask(_q):
+        raise KeyboardInterrupt
+
+    pipe = Pipeline(load_config(repo), {"fake": FakeAdapter(Script())}, RunOptions(), ask=ask, out=lambda _m: None)
+    state, paths = pipe.start(intake.from_file(requirement))
+    assert pipe.execute(state, paths, stages.select()) == "completed"
+    assert json.loads((paths.run_dir / "state.json").read_text())["status"] == "completed"
+    assert paths.report_file.exists() and state.rating is None

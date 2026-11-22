@@ -282,7 +282,10 @@ class Pipeline:
             return
         if not tcfg.get("ask_rating", True):
             return
-        answer = self.ask("How useful was this run? 1-5 (Enter to skip) ").strip()
+        try:
+            answer = self.ask("How useful was this run? 1-5 (Enter to skip) ").strip()
+        except (EOFError, KeyboardInterrupt):  # skipping the rating must not skip finalisation
+            return
         if answer in {"1", "2", "3", "4", "5"}:
             state.rating = int(answer)
 
