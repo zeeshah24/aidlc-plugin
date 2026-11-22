@@ -77,6 +77,7 @@ def call_agent(ctx: StageContext, stage: str, prompt: str, writable: bool) -> Ag
             f"provider '{choice.provider}' for stage '{stage}' is not available "
             f"(install its CLI or change models.yaml)"
         )
+    check_budget(ctx)  # a resumed run that is already over budget must not spend more
     req = AgentRequest(
         stage,
         prompt,
@@ -505,6 +506,12 @@ def run_verify(ctx: StageContext) -> Outcome:
             gaps = ["Verification reported gaps; see verification.md"]
         prefixes = tuple(ctx.cfg.get("pipeline.require_test_for", ["AC-"]) or [])
         untested = [rid for rid in matrix["untested"] if prefixes and rid.startswith(prefixes)]
+        if untested:  # existing, unchanged tests also count as coverage
+            all_tests = [f for f in scan.tracked_files(ctx.workdir) if is_test(f, globs)]
+            covered = {
+                r for refs in traceability.references(ctx.workdir, all_tests, ctx.id_pattern()).values() for r in refs
+            }
+            untested = [rid for rid in untested if rid not in covered]
         gaps += [f"{rid} has no test referencing it (traceability gate)" for rid in untested]
         if gaps:
             return Outcome("route_back", f"{len(gaps)} gap(s)", gaps, gate="gaps")

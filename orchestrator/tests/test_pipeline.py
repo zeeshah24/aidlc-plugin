@@ -296,3 +296,26 @@ def test_untested_requirement_id_fails_verify_deterministically(repo: Path, requ
     state, paths = pipe.start(intake.from_file(requirement))
     assert pipe.execute(state, paths, stages.select()) != "completed"
     assert "no test referencing it" in json.dumps(state.history + state.feedback)
+
+
+def test_existing_unchanged_tests_count_for_coverage_gate(repo: Path, requirement: Path):
+    import subprocess
+
+    (repo / "tests").mkdir(exist_ok=True)
+    (repo / "tests" / "test_existing.py").write_text("def test_existing():  # AC-1\n    assert True\n")
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "existing test"], cwd=repo, check=True)
+    untested = "from calc import add\n\n\ndef test_add():  # REQ-1\n    assert add(2, 3) == 5\n"
+    pipe, _ = pipeline(repo, Script(test=[lambda r: write(r, "tests/test_calc.py", untested)]))
+    state, paths = pipe.start(intake.from_file(requirement))
+    pipe.execute(state, paths, stages.select())
+    assert "no test referencing it" not in json.dumps(state.history + state.feedback)
+
+
+def test_over_budget_run_makes_no_further_agent_calls(repo: Path, requirement: Path):
+    pipe, fake = pipeline(repo, Script())
+    state, paths = pipe.start(intake.from_file(requirement))
+    pipe.cfg.project.setdefault("pipeline", {})["max_tokens"] = 10
+    state.stage("intake").tokens_in = 11
+    assert pipe.execute(state, paths, stages.select()) == "failed"
+    assert fake.calls == []
