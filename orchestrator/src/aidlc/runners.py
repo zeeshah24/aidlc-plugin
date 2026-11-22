@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import fnmatch
 import json
 import re
 import shutil
@@ -15,8 +14,8 @@ from pathlib import Path
 from aidlc import deps, gitutil, harness, models, prompts, report, scan, stack, traceability
 from aidlc.adapters import AgentAdapter, AgentRequest, AgentResult
 from aidlc.config import Config
-from aidlc.harness import AuditLog, RunPaths
 from aidlc.guardrails import _match as guardrails_match
+from aidlc.harness import AuditLog, RunPaths
 from aidlc.state import RunState
 from aidlc.util import glob_match, head, sha256_file, strip_fence, tail
 
