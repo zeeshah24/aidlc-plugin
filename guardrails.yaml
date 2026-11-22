@@ -1,0 +1,130 @@
+# AI-DLC default guardrails. Enforced twice: as prompt rules and at the tool level
+# (Claude Code PreToolUse hook -> `aidlc guard`, plus orchestrator post-hoc checks).
+# Org layer (.aidlc/org/guardrails.yaml) may redefine; project layer may only tighten.
+version: 1
+prompt_rules:
+  - Work only inside the current repository worktree.
+  - Never read, print or commit secrets, credentials or .env files.
+  - Only install dependencies approved in the plan's dependency gate.
+  - Do not modify locked red tests, CI workflows, or anything under .aidlc/.
+  - Do not commit, push, open PRs or call network services; the orchestrator does that.
+commands:
+  allow:
+    - "git status*"
+    - "git diff*"
+    - "git log*"
+    - "git show*"
+    - "git add*"
+    - "git restore*"
+    - "git checkout -- *"
+    - "git rm *"
+    - "git mv *"
+    - "ls*"
+    - "pwd"
+    - "cat *"
+    - "head *"
+    - "tail *"
+    - "wc *"
+    - "grep *"
+    - "rg *"
+    - "find *"
+    - "echo *"
+    - "mkdir *"
+    - "pytest*"
+    - "python -m pytest*"
+    - "python3 -m pytest*"
+    - "python -m unittest*"
+    - "python -m mypy*"
+    - "uv run pytest*"
+    - "poetry run pytest*"
+    - "ruff *"
+    - "mypy *"
+    - "npm test*"
+    - "npm run *"
+    - "npm ci"
+    - "npm install"
+    - "npx jest*"
+    - "npx vitest*"
+    - "npx tsc*"
+    - "pnpm test*"
+    - "yarn test*"
+    - "go test*"
+    - "go build*"
+    - "go vet*"
+    - "mvn *"
+    - "./gradlew *"
+    - "dotnet build*"
+    - "dotnet test*"
+    - "cargo test*"
+    - "cargo build*"
+    - "make test*"
+    - "make lint*"
+  deny:
+    - "sudo*"
+    - "*rm -rf*"
+    - "*curl *"
+    - "*wget *"
+    - "*ssh *"
+    - "*scp *"
+    - "*git push*"
+    - "*git commit*"
+    - "*git reset --hard*"
+    - "*git rebase*"
+    - "*git config*"
+    - "*$(*"
+    - "*`*"
+    - "*> /*"
+    - "*>/*"
+    - "*> ../*"
+    - "*>../*"
+    - "*| sh*"
+    - "*| bash*"
+    - "*eval *"
+    - "*printenv*"
+    - "*-exec*"
+    - "*-delete*"
+    - "*.env*"
+paths:
+  protected:
+    - ".git/**"
+    - ".aidlc/**"
+    - ".github/workflows/**"
+    - ".env"
+    - "**/.env"
+    - "**/*.pem"
+    - "**/*.key"
+    - "**/secrets/**"
+  no_read:                # secrets the Read/Grep/Glob tools may not open
+    - ".env"
+    - "**/.env"
+    - ".env.*"
+    - "**/.env.*"
+    - "**/*.pem"
+    - "**/*.key"
+    - "**/secrets/**"
+dependencies:
+  install_commands:
+    - "pip install*"
+    - "pip3 install*"
+    - "python -m pip install*"
+    - "uv add*"
+    - "uv pip install*"
+    - "poetry add*"
+    - "npm install *"
+    - "npm i *"
+    - "yarn add*"
+    - "pnpm add*"
+    - "go get*"
+    - "cargo add*"
+    - "dotnet add*"
+  allowed_licenses: [MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, PSF-2.0, MPL-2.0, Unlicense]
+  allowed_registries: [PyPI, npm, Go, Maven, NuGet, crates.io]
+  block_on_cve: true
+env:
+  # Never forwarded to test runs, which execute agent-written code.
+  test_exclude: [ANTHROPIC_API_KEY, OPENAI_API_KEY, CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX, AWS_PROFILE,
+                 CODEX_HOME]
+  # Scoped tokens: only these variables reach agent and test subprocesses.
+  passthrough: [PATH, HOME, USER, LANG, LC_ALL, TERM, TMPDIR, SHELL, VIRTUAL_ENV, PYTHONPATH, JAVA_HOME,
+                GOPATH, GOROOT, GOCACHE, NODE_PATH, ANTHROPIC_API_KEY, CLAUDE_CODE_USE_BEDROCK,
+                CLAUDE_CODE_USE_VERTEX, AWS_REGION, AWS_PROFILE, OPENAI_API_KEY, CODEX_HOME]

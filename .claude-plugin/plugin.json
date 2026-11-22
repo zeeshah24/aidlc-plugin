@@ -1,0 +1,11 @@
+{
+  "name": "aidlc",
+  "version": "0.1.0",
+  "description": "AI-DLC: drive markdown or Jira requirements through an agent pipeline to a reviewed PR, with guardrails, traceability and cost reporting.",
+  "author": {"name": "zeeshah24"},
+  "repository": "https://github.com/zeeshah24/aidlc-plugin",
+  "commands": "./commands",
+  "agents": "./agents",
+  "hooks": "./hooks/hooks.json",
+  "mcpServers": "./mcp.json"
+}
