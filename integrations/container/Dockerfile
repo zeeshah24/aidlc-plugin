@@ -19,7 +19,9 @@ RUN apt-get update \
  && npm cache clean --force
 
 COPY . /opt/aidlc-plugin
-RUN pip install --no-cache-dir /opt/aidlc-plugin/orchestrator
+# The dev extra brings pytest and ruff, the default Python test/lint gates. Extend this image with
+# your project's own dependencies (FROM aidlc-agent ...) so its test suite can run.
+RUN pip install --no-cache-dir "/opt/aidlc-plugin/orchestrator[dev]"
 
 # AIDLC_ISOLATED tells aidlc it may route write stages to agents without pre-tool hooks (Codex).
 ENV AIDLC_ISOLATED=1 \
