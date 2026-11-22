@@ -17,7 +17,7 @@ from aidlc.adapters import AgentAdapter, AgentRequest, AgentResult
 from aidlc.config import Config
 from aidlc.harness import AuditLog, RunPaths
 from aidlc.state import RunState
-from aidlc.util import head, sha256_file, strip_fence, tail
+from aidlc.util import glob_match, head, sha256_file, strip_fence, tail
 
 
 class StageError(RuntimeError):
@@ -137,7 +137,7 @@ def run_tests(ctx: StageContext) -> tuple[int, str]:
 
 
 def is_test(path: str, globs: list[str]) -> bool:
-    return any(fnmatch.fnmatch(path, g) for g in globs)
+    return glob_match(path, globs)
 
 
 def discard(ctx: StageContext, paths: list[str]) -> None:

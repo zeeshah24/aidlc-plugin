@@ -46,6 +46,14 @@ def test_jira(monkeypatch):
         intake.from_jira("PROJ-1", {}, fetch)
 
 
+def test_root_level_tests_match_globs():
+    from aidlc.util import glob_match
+
+    assert glob_match("cart_test.go", ["**/*_test.go"])
+    assert glob_match("pkg/cart_test.go", ["**/*_test.go"])
+    assert not glob_match("cart.go", ["**/*_test.go"])
+
+
 def test_stack_detection(tmp_path: Path):
     (tmp_path / "pyproject.toml").write_text('[project]\nname="x"\ndependencies=["fastapi"]\n')
     (tmp_path / "package.json").write_text('{"scripts": {"test": "jest"}, "devDependencies": {"jest": "1"}}')

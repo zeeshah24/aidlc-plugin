@@ -19,6 +19,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from aidlc import gitutil
+from aidlc.util import glob_match
 
 SEVERITY = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 SOURCE_EXT = {".py", ".js", ".jsx", ".ts", ".tsx", ".go", ".java", ".cs", ".rs", ".kt", ".rb", ".php"}
@@ -52,7 +53,7 @@ def tracked_files(root: Path) -> list[str]:
 
 
 def _is_test(path: str, globs: list[str]) -> bool:
-    return any(fnmatch.fnmatch(path, g) for g in globs)
+    return glob_match(path, globs)
 
 
 # --- Python built-ins -------------------------------------------------------------------------

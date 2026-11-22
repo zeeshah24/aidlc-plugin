@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fnmatch
 import hashlib
 import re
 from datetime import datetime, timezone
@@ -29,6 +30,11 @@ def load_yaml(path: Path) -> dict:
     if not isinstance(data, dict):
         raise ValueError(f"{path} must contain a mapping")
     return data
+
+
+def glob_match(path: str, globs: list[str]) -> bool:
+    """fnmatch where a leading `**/` also matches files at the repository root."""
+    return any(fnmatch.fnmatch(path, g) or (g.startswith("**/") and fnmatch.fnmatch(path, g[3:])) for g in globs)
 
 
 def slugify(text: str) -> str:
