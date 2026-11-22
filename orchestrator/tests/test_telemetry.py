@@ -78,10 +78,11 @@ def test_enabled_exports_content_free_trace(repo, requirement, collector, monkey
     assert "gen_ai.usage.input_tokens" in attrs and attrs["aidlc.stage.status"] == {"stringValue": "passed"}
 
     [record] = [json.loads(x) for x in (repo / ".aidlc/telemetry.jsonl").read_text().splitlines()]
-    assert record["run_id"] == state.run_id and record["team"] == "payments"
+    assert record["run_id"].startswith("h:") and record["team"] == "payments"
     assert record["repo"].startswith("h:") and "developer" not in record
     exported = json.dumps(post["body"]) + json.dumps(record)
-    for content in (SPEC.splitlines()[2], IMPL, TEST, "calc.py", "Add numbers", str(repo), "t@example.com"):
+    leaks = (state.run_id, state.req_id, SPEC.splitlines()[2], IMPL, TEST, "calc.py", "Add numbers", str(repo))
+    for content in (*leaks, "t@example.com"):
         assert content not in exported
     assert "telemetry.exported" in audit_events(paths)
 
@@ -92,6 +93,7 @@ def test_raw_identifiers_and_developer_are_opt_in(repo, requirement):
     state, paths = run(repo, requirement)
     record = telemetry.summary(load_config(repo), state, paths)
     assert record["repo"] == repo.name and record["developer"] == "dev@example.com"
+    assert record["run_id"] == state.run_id
 
 
 def test_export_failure_does_not_fail_run(repo, requirement):
@@ -165,6 +167,14 @@ def test_outcomes_join_prs_by_run_id():
     assert out["reverted"] and out["state"] == "merged"
     span = telemetry.outcome_span(out, "2026-11-22T00:00:00+00:00")
     assert span["traceId"] == telemetry.trace_id("20261120-abc")
+
+
+def test_outcome_run_ids_hash_like_run_records(repo, requirement):
+    cfg = load_config(repo)
+    state, paths = run(repo, requirement)
+    run_record = telemetry.summary(cfg, state, paths)
+    [outcome] = telemetry.pseudonymize(cfg, [{"run_id": state.run_id, "pr": 1}])
+    assert outcome["run_id"] == run_record["run_id"] != state.run_id
 
 
 def test_empty_org_telemetry_policy_still_owns_settings(repo):

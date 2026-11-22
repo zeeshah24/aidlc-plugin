@@ -71,7 +71,7 @@ def summary(cfg: Config, state: RunState, paths: RunPaths) -> dict:
     record = {
         "schema": SCHEMA,
         "aidlc_version": __version__,
-        "run_id": state.run_id,
+        "run_id": _ident(cfg, state.run_id),  # run ids embed the requirement id
         "team": tcfg.get("team", ""),
         "repo": _ident(cfg, repo),
         "status": state.status,
@@ -312,6 +312,11 @@ def outcomes(prs: list[dict], reverts: list[dict]) -> list[dict]:
             }
         )
     return out
+
+
+def pseudonymize(cfg: Config, records: list[dict]) -> list[dict]:
+    """Hash outcome run ids the same way as run records, so both still join."""
+    return [{**r, "run_id": _ident(cfg, r["run_id"])} for r in records]
 
 
 def fetch_outcomes(root: Path, limit: int) -> list[dict]:
