@@ -88,10 +88,11 @@ def test_project_cannot_relax_org_isolation(repo: Path):
     org.mkdir(parents=True)
     (org / "aidlc.yaml").write_text(yaml.safe_dump({"harness": {"require_isolation": True}}))
     data = yaml.safe_load((repo / "aidlc.yaml").read_text())
-    data["harness"] = {"require_isolation": False}
-    (repo / "aidlc.yaml").write_text(yaml.safe_dump(data))
-    cfg = load_config(repo)
-    assert cfg.get("harness.require_isolation") is True and any("isolation" in w for w in cfg.warnings)
+    for relaxed in (False, None, 0):
+        data["harness"] = {"require_isolation": relaxed}
+        (repo / "aidlc.yaml").write_text(yaml.safe_dump(data))
+        cfg = load_config(repo)
+        assert cfg.get("harness.require_isolation") is True and any("isolation" in w for w in cfg.warnings)
 
 
 def test_unknown_and_mistyped_keys_warn(repo: Path):
