@@ -19,7 +19,7 @@ jobs:
           v="${GITHUB_REF_NAME#v}"
           grep -q "__version__ = \"$v\"" orchestrator/src/aidlc/__init__.py
           grep -q "\"version\": \"$v\"" .claude-plugin/plugin.json
-      - run: pip install build==1.2.2 && python -m build orchestrator
+      - run: pip install build==1.2.2 && python -m build --wheel orchestrator  # wheel only: it bundles ../agents and the policy files, which an sdist rebuild cannot
       - uses: actions/attest-build-provenance@v1
         with: {subject-path: "orchestrator/dist/*"}
       - uses: pypa/gh-action-pypi-publish@release/v1
