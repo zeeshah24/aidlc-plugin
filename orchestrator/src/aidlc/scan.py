@@ -8,7 +8,6 @@ npm audit, madge, any SARIF-emitting tool) run when installed or configured.
 from __future__ import annotations
 
 import ast
-import fnmatch
 import hashlib
 import json
 import re
