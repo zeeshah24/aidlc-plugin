@@ -294,8 +294,11 @@ def run_test(ctx: StageContext) -> Outcome:
     profile = ctx.profile()
     globs = profile.get("test_globs", [])
     ids = traceability.requirement_ids(ctx.read("spec"), ctx.id_pattern())
-    baseline_red = False
-    if not ctx.paths.artifact("test_lock").exists():
+    lock_path = ctx.paths.artifact("test_lock")
+    previous = json.loads(lock_path.read_text()).get("files", {}) if lock_path.exists() else {}
+    # On a rerun HEAD already contains the earlier red tests, so a clean baseline cannot be measured.
+    baseline_red = bool(previous)
+    if not previous:
         base_code, _ = run_tests(ctx)
         baseline_red = base_code not in (0, 5)  # 5 = pytest "no tests collected"
 
@@ -351,7 +354,10 @@ def run_test(ctx: StageContext) -> Outcome:
             "commit": sha,
             "red_exit_code": code,
             "test_command": profile.get("test_command"),
-            "files": {p: sha256_file(ctx.workdir / p) for p in sorted(changed) if (ctx.workdir / p).is_file()},
+            "files": {
+                **{p: h for p, h in previous.items() if (ctx.workdir / p).is_file()},
+                **{p: sha256_file(ctx.workdir / p) for p in sorted(changed) if (ctx.workdir / p).is_file()},
+            },
         }
         ctx.paths.artifact("test_lock").write_text(json.dumps(lock, indent=2) + "\n")
         missing = [i for i in ids if i not in covered]
