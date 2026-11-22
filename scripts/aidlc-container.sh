@@ -9,6 +9,10 @@ set -euo pipefail
 IMAGE="${AIDLC_IMAGE:-aidlc-agent:local}"
 PLUGIN_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ROOT="$(git rev-parse --show-toplevel)"
+# A linked worktree keeps its git metadata in the main repository; mount that too.
+COMMON="$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)"
+mounts=(-v "$ROOT:$ROOT")
+case "$COMMON/" in "$ROOT"/*) ;; *) mounts+=(-v "$COMMON:$COMMON") ;; esac
 
 if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
   docker build -t "$IMAGE" -f "$PLUGIN_ROOT/integrations/container/Dockerfile" "$PLUGIN_ROOT"
@@ -33,6 +37,6 @@ exec docker run --rm "${args[@]}" \
   --tmpfs /tmp:exec \
   --tmpfs /home/agent:exec \
   --network "${AIDLC_NETWORK:-bridge}" \
-  -v "$ROOT:$ROOT" \
+  "${mounts[@]}" \
   -w "$ROOT" \
   "$IMAGE" "$@"
