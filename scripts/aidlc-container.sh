@@ -14,10 +14,12 @@ if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
   docker build -t "$IMAGE" -f "$PLUGIN_ROOT/integrations/container/Dockerfile" "$PLUGIN_ROOT"
 fi
 
-# Only model keys, a scoped git token and Jira credentials are forwarded; never cloud/deploy credentials.
+# Only model keys, a scoped git token, Jira credentials and the adopter's own telemetry collector settings are
+# forwarded; never cloud/deploy credentials.
 args=()
 for var in ANTHROPIC_API_KEY OPENAI_API_KEY GH_TOKEN JIRA_BASE_URL JIRA_EMAIL JIRA_API_TOKEN JIRA_PAT \
-           HTTPS_PROXY HTTP_PROXY NO_PROXY; do
+           HTTPS_PROXY HTTP_PROXY NO_PROXY \
+           OTEL_EXPORTER_OTLP_ENDPOINT OTEL_EXPORTER_OTLP_HEADERS AIDLC_TELEMETRY_SALT; do
   if [[ -n "${!var:-}" ]]; then args+=(-e "$var"); fi
 done
 if [[ -t 0 && -t 1 ]]; then args+=(-it); fi
