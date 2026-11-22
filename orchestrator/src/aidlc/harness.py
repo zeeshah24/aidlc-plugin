@@ -83,6 +83,19 @@ def scoped_env(cfg: Config, paths: RunPaths, stage: str) -> dict[str, str]:
     return env
 
 
+GUARDRAILS_SNAPSHOT = "guardrails.json"
+
+
+def snapshot_guardrails(cfg: Config, paths: RunPaths) -> None:
+    """Freeze the policy at run start so an agent editing project config mid-run cannot widen it."""
+    (paths.run_dir / GUARDRAILS_SNAPSHOT).write_text(json.dumps(cfg.guardrails, indent=2))
+
+
+def run_guardrails(run_dir: Path, fallback: dict) -> dict:
+    snap = run_dir / GUARDRAILS_SNAPSHOT
+    return json.loads(snap.read_text()) if snap.exists() else fallback
+
+
 def hook_settings(paths: RunPaths, guardrails: dict | None = None) -> Path:
     """Claude Code settings: guard hooks plus native deny rules, which Claude also applies inside
     Grep/Glob searches the hook only sees as a directory."""

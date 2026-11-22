@@ -85,6 +85,7 @@ class Pipeline:
         intake.write_requirement(req, self.cfg.aidlc_dir)
         paths.artifact("requirement").write_text(req.body)
         state.save(paths.run_dir)
+        harness.snapshot_guardrails(self.cfg, paths)
         (self.cfg.aidlc_dir / "current").write_text(run_id)
         AuditLog(paths.audit_file).log(
             "run.start", run_id=run_id, source=req.source, branch=branch, worktree=use_worktree
@@ -101,6 +102,7 @@ class Pipeline:
         state = RunState(run_id, "adhoc", f"Ad-hoc run on {branch}", "adhoc", base_branch, base_sha, branch, str(root))
         paths = RunPaths(root, self.runs_dir / run_id, root)
         state.save(paths.run_dir)
+        harness.snapshot_guardrails(self.cfg, paths)
         (self.cfg.aidlc_dir / "current").write_text(run_id)
         return state, paths
 

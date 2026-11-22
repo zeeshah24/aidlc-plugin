@@ -95,6 +95,8 @@ paths:
     - ".git/**"
     - ".aidlc/**"
     - ".github/workflows/**"
+    - "aidlc.yaml"          # the orchestrator's own trusted config
+    - "CONVENTIONS.md"
     - ".env"
     - "**/.env"
     - "**/*.pem"

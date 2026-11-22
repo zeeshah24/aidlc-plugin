@@ -21,7 +21,7 @@ from pathlib import Path
 
 from aidlc import permissions
 from aidlc.config import load_config
-from aidlc.harness import AuditLog
+from aidlc.harness import AuditLog, run_guardrails
 
 WRITE_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
 NETWORK_TOOLS = {"WebFetch", "WebSearch"}
@@ -195,7 +195,8 @@ def hook_main(event: str) -> int:
         audit.log("tool.used", tool=tool, input=_summarize(tool_input))
         return 0
     cfg = load_config(Path(os.environ.get("AIDLC_PROJECT_ROOT") or jail))
-    decision = evaluate(tool, tool_input, cfg.guardrails, jail, run_dir)
+    rails = run_guardrails(run_dir, cfg.guardrails)
+    decision = evaluate(tool, tool_input, rails, jail, run_dir)
     if decision.ask:
         ok, message = permissions.check(
             run_dir,
