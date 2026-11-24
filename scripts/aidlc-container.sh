@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 # Run aidlc with its agents inside a container that sees only the current repository.
 # Usage: scripts/aidlc-container.sh run --file requirements/DEMO-1.md
-#   AIDLC_IMAGE    image tag (default aidlc-agent:local; built on first use)
+#   AIDLC_IMAGE    image tag (default aidlc-agent:<content hash>; built on first use)
 #   AIDLC_NETWORK  docker network (default bridge); point it at a network whose egress
 #                  only reaches your model API, git host and package registry.
 set -euo pipefail
 
-IMAGE="${AIDLC_IMAGE:-aidlc-agent:local}"
 PLUGIN_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# Tag the default image by the content it is built from, so upgrading the plugin rebuilds it.
+BUILD_HASH="$(cd "$PLUGIN_ROOT" && find integrations/container orchestrator/pyproject.toml orchestrator/src -type f \
+  ! -name '*.pyc' -print0 | LC_ALL=C sort -z | xargs -0 cat | (sha256sum 2>/dev/null || shasum -a 256) | cut -c1-12)"
+IMAGE="${AIDLC_IMAGE:-aidlc-agent:$BUILD_HASH}"
 ROOT="$(git rev-parse --show-toplevel)"
 # A linked worktree keeps its git metadata in the main repository; mount that too.
 COMMON="$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)"
