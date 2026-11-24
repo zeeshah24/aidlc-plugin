@@ -66,8 +66,9 @@ models:
 On a paid Copilot plan, name models instead (see `/model` in Copilot CLI) and keep the reviewer rule, e.g.
 `coding: {provider: copilot, model: claude-sonnet-4.5}` and `review: {provider: copilot, model: gpt-5}`. Each stage
 call uses Copilot AI credits, and a full run makes at least seven calls, so the Free allowance covers few runs.
-Copilot runs the same guard hooks as Claude Code (from a generated plugin), gets no built-in MCP servers, and has
-`apply_patch`, `web_fetch` and `web_search` removed. Cost is not reported in dollars; token counts are.
+Copilot runs the same guard hooks as Claude Code (from a generated plugin), starts none of your MCP servers, and has
+`apply_patch`, `web_fetch` and `web_search` removed; model and GitHub tokens are hidden from its shell commands.
+Cost is not reported in dollars; token counts are.
 
 Each run works on its own branch in `.aidlc/worktrees/<run-id>/`. It writes artifacts to `.aidlc/runs/<run-id>/`
 and a cost/time report to `.aidlc/reports/<run-id>.md`.

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import time
 import uuid
@@ -165,11 +164,13 @@ class CodexAdapter:
 class CopilotAdapter:
     """GitHub Copilot CLI (`copilot --output-format json`, prompt on stdin). Copilot runs Claude-format
     PreToolUse hooks from a plugin directory (fail-closed on exit 2), so the guard is wired through a
-    generated plugin; token usage is read from the session's events.jsonl."""
+    generated plugin; token usage comes from the streamed `assistant.usage` events."""
 
     name = "copilot"
-    # apply_patch edits carry no file path the guard can check; MCP servers are not inherited.
+    # apply_patch edits carry no file path the guard can check.
     EXCLUDED_TOOLS = ["apply_patch", "web_fetch", "web_search"]
+    # Removed from the environment of the agent's shell commands and MCP servers.
+    SECRET_ENV = ["COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"]
 
     def __init__(self, binary: str = "copilot"):
         self.binary = binary
@@ -177,7 +178,15 @@ class CopilotAdapter:
     def available(self) -> bool:
         return shutil.which(self.binary) is not None
 
-    def command(self, req: AgentRequest, session_id: str) -> list[str]:
+    def mcp_servers(self, req: AgentRequest) -> list[str]:
+        """Every non-builtin MCP server Copilot would start (user, workspace and plugin config)."""
+        proc = run_killable([self.binary, "mcp", "list", "--json"], cwd=req.workdir, env=req.env, timeout=60)
+        if proc.returncode != 0:
+            raise RuntimeError(f"copilot mcp list failed: {(proc.stderr or proc.stdout)[-500:]}")
+        servers = json.loads(proc.stdout or "{}").get("mcpServers", {})
+        return sorted(name for name, cfg in servers.items() if cfg.get("source") != "builtin")
+
+    def command(self, req: AgentRequest, session_id: str, mcp_servers: list[str] = ()) -> list[str]:
         cmd = [
             self.binary,
             "--output-format=json",
@@ -189,6 +198,8 @@ class CopilotAdapter:
             "--disallow-temp-dir",
             "--excluded-tools=" + ",".join(self.EXCLUDED_TOOLS),
         ]
+        cmd += [f"--secret-env-vars={var}" for var in self.SECRET_ENV]
+        cmd += [f"--disable-mcp-server={name}" for name in mcp_servers]
         if req.writable:
             cmd += ["--allow-tool=write", "--allow-tool=shell"]
         else:
@@ -210,41 +221,33 @@ class CopilotAdapter:
         (root / ".claude-plugin" / "plugin.json").write_text(json.dumps(manifest, indent=2))
         return root
 
-    @staticmethod
-    def _usage(env: dict[str, str], session_id: str) -> tuple[int, int]:
-        home = env.get("COPILOT_HOME") or os.path.join(env.get("HOME") or os.path.expanduser("~"), ".copilot")
-        events = Path(home) / "session-state" / session_id / "events.jsonl"
-        tin = tout = 0
-        if not events.exists():
-            return 0, 0
-        for line in events.read_text().splitlines():
-            try:
-                ev = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if ev.get("type") == "assistant.usage":
-                data = ev.get("data", {})
-                tin += sum(data.get(k) or 0 for k in ("inputTokens", "cacheReadTokens", "cacheWriteTokens"))
-                tout += data.get("outputTokens") or 0
-        return tin, tout
-
     def run(self, req: AgentRequest) -> AgentResult:
         start = time.monotonic()
-        session_id = str(uuid.uuid4())
+        try:
+            servers = self.mcp_servers(req)
+        except (RuntimeError, ValueError) as e:
+            return AgentResult("", duration_s=time.monotonic() - start, ok=False, error=str(e))
         proc = run_killable(
-            self.command(req, session_id), input=req.prompt, cwd=req.workdir, env=req.env, timeout=req.timeout_s
+            self.command(req, str(uuid.uuid4()), servers),
+            input=req.prompt,
+            cwd=req.workdir,
+            env=req.env,
+            timeout=req.timeout_s,
         )
-        text, exit_code = "", proc.returncode
+        text, exit_code, tin, tout = "", proc.returncode, 0, 0
         for line in proc.stdout.splitlines():
             try:
                 ev = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            if ev.get("type") == "assistant.message" and (content := ev.get("data", {}).get("content")):
-                text = content
+            data = ev.get("data") or {}
+            if ev.get("type") == "assistant.message" and data.get("content"):
+                text = data["content"]
+            elif ev.get("type") == "assistant.usage":
+                tin += sum(data.get(k) or 0 for k in ("inputTokens", "cacheReadTokens", "cacheWriteTokens"))
+                tout += data.get("outputTokens") or 0
             elif ev.get("type") == "result":
                 exit_code = ev.get("exitCode", exit_code)
-        tin, tout = self._usage(req.env, session_id)
         ok = proc.returncode == 0 and exit_code == 0
         error = "" if ok else (proc.stderr or proc.stdout)[-2000:]
         return AgentResult(text, tin, tout, None, time.monotonic() - start, ok, error)

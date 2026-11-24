@@ -35,35 +35,53 @@ def test_copilot_command_wires_guard_plugin_and_native_denies(tmp_path: Path):
     assert "aidlc guard pre-tool" in hooks["PreToolUse"][0]["hooks"][0]["command"]
 
 
-def test_copilot_run_parses_jsonl_and_session_usage(tmp_path: Path):
-    home = tmp_path / "copilot-home"
+MCP_LIST = (
+    '{"mcpServers": {"dev-db": {"source": "user"}, "jira": {"source": "plugin"}, "github": {"source": "builtin"}}}'
+)
+
+
+def _fake_copilot(tmp_path: Path, body: str) -> Path:
     fake = tmp_path / "copilot"
     fake.write_text(
         "#!/bin/sh\n"
-        'sid=$(printf "%s\\n" "$@" | sed -n "s/^--session-id=//p")\n'
-        'mkdir -p "$COPILOT_HOME/session-state/$sid"\n'
-        'echo \'{"type":"assistant.usage","data":{"inputTokens":100,"cacheReadTokens":20,'
-        '"outputTokens":7}}\' > "$COPILOT_HOME/session-state/$sid/events.jsonl"\n'
-        "cat >/dev/null\n"
-        'echo \'{"type":"assistant.message","data":{"content":"done"}}\'\n'
-        'echo \'{"type":"assistant.message","data":{"content":""}}\'\n'
-        'echo \'{"type":"result","exitCode":0}\'\n'
+        f"if [ \"$1\" = mcp ]; then echo '{MCP_LIST}'; exit 0; fi\n"
+        'printf "%s\\n" "$@" > "$(dirname "$0")/args"\n'
+        "cat >/dev/null\n" + body
     )
     fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
-    env = {"PATH": os.environ["PATH"], "COPILOT_HOME": str(home)}
-    result = CopilotAdapter(binary=str(fake)).run(_req(tmp_path, writable=False, env=env))
+    return fake
+
+
+def test_copilot_run_parses_streamed_jsonl(tmp_path: Path):
+    fake = _fake_copilot(
+        tmp_path,
+        'echo \'{"type":"assistant.usage","ephemeral":true,"data":{"inputTokens":100,'
+        '"cacheReadTokens":20,"outputTokens":7}}\'\n'
+        'echo \'{"type":"assistant.message","data":{"content":"done"}}\'\n'
+        'echo \'{"type":"assistant.message","data":{"content":""}}\'\n'
+        'echo \'{"type":"result","exitCode":0}\'\n',
+    )
+    result = CopilotAdapter(binary=str(fake)).run(_req(tmp_path, writable=False, env={"PATH": os.environ["PATH"]}))
     assert result.ok and result.text == "done"
     assert (result.tokens_in, result.tokens_out) == (120, 7)
+    args = (tmp_path / "args").read_text().splitlines()
+    assert "--disable-mcp-server=dev-db" in args and "--disable-mcp-server=jira" in args
+    assert "--disable-mcp-server=github" not in args
+    assert "--secret-env-vars=COPILOT_GITHUB_TOKEN" in args
 
 
 def test_copilot_failed_result_is_not_ok(tmp_path: Path):
-    fake = tmp_path / "copilot"
-    fake.write_text(
-        '#!/bin/sh\ncat >/dev/null\necho \'Error: not logged in\' >&2\necho \'{"type":"result","exitCode":1}\'\n'
-    )
-    fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
-    result = CopilotAdapter(binary=str(fake)).run(_req(tmp_path, writable=False, env={"HOME": str(tmp_path)}))
+    fake = _fake_copilot(tmp_path, 'echo \'Error: not logged in\' >&2\necho \'{"type":"result","exitCode":1}\'\n')
+    result = CopilotAdapter(binary=str(fake)).run(_req(tmp_path, writable=False, env={"PATH": os.environ["PATH"]}))
     assert not result.ok and "not logged in" in result.error
+
+
+def test_copilot_fails_closed_when_mcp_servers_cannot_be_listed(tmp_path: Path):
+    fake = tmp_path / "copilot"
+    fake.write_text("#!/bin/sh\necho boom >&2\nexit 3\n")
+    fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+    result = CopilotAdapter(binary=str(fake)).run(_req(tmp_path, writable=False, env={"PATH": os.environ["PATH"]}))
+    assert not result.ok and "mcp list" in result.error
 
 
 def test_guard_checks_copilot_path_argument(tmp_path: Path):
