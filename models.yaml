@@ -1,5 +1,5 @@
 # Model tier routing. Each stage maps to a tier name or an explicit {provider, model}.
-# Providers: claude (Claude Code CLI), codex (OpenAI Codex CLI).
+# Providers: claude (Claude Code CLI), codex (OpenAI Codex CLI), copilot (GitHub Copilot CLI).
 version: 1
 tiers:
   fast:      {provider: claude, model: claude-haiku-4-5}

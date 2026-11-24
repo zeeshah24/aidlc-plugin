@@ -3,8 +3,9 @@ import os
 import stat
 from pathlib import Path
 
-from aidlc import guardrails, harness
+from aidlc import guardrails, harness, models
 from aidlc.adapters import AgentRequest, CopilotAdapter
+from aidlc.config import load_config
 
 
 def _req(tmp_path: Path, writable: bool, settings: Path | None = None, env: dict | None = None) -> AgentRequest:
@@ -88,3 +89,30 @@ def test_guard_checks_copilot_path_argument(tmp_path: Path):
     rails = {"paths": {"protected": [".git/**"]}}
     decision = guardrails.evaluate("Write", {"path": str(tmp_path / ".git" / "config")}, rails, tmp_path, None)
     assert not decision.allowed
+
+
+FREE_PLAN = """models:
+  tiers:
+    fast:      {provider: copilot, model: auto}
+    reasoning: {provider: copilot, model: auto}
+    coding:    {provider: copilot, model: auto}
+  rules:
+    reviewer_must_differ_from_implementer: false
+"""
+PAID_PLAN = """models:
+  tiers:
+    fast:      {provider: copilot, model: auto}
+    reasoning: {provider: copilot, model: auto}
+    coding:    {provider: copilot, model: claude-sonnet-4.5}
+  stages:
+    review: {provider: copilot, model: gpt-5}
+"""
+
+
+def test_readme_copilot_configs_route_every_stage_to_copilot(repo: Path):
+    for text, review_model in ((FREE_PLAN, "auto"), (PAID_PLAN, "gpt-5")):
+        (repo / "aidlc.yaml").write_text(text)
+        cfg = load_config(repo)
+        assert models.validate(cfg) == []
+        assert {models.resolve(cfg, s).provider for s in cfg.models["stages"]} == {"copilot"}
+        assert models.resolve(cfg, "review").model == review_model

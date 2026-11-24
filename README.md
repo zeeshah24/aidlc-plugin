@@ -63,9 +63,21 @@ models:
     reviewer_must_differ_from_implementer: false   # Copilot Free only offers `auto`
 ```
 
-On a paid Copilot plan, name models instead (see `/model` in Copilot CLI) and keep the reviewer rule, e.g.
-`coding: {provider: copilot, model: claude-sonnet-4.5}` and `review: {provider: copilot, model: gpt-5}`. Each stage
-call uses Copilot AI credits, and a full run makes at least seven calls, so the Free allowance covers few runs.
+On a paid Copilot plan, name models instead (see `/model` in Copilot CLI) and keep the reviewer rule. `review` is a
+stage, so route it under `stages` to a model other than the `coding` tier:
+
+```yaml
+models:
+  tiers:
+    fast:      {provider: copilot, model: auto}
+    reasoning: {provider: copilot, model: auto}
+    coding:    {provider: copilot, model: claude-sonnet-4.5}
+  stages:
+    review: {provider: copilot, model: gpt-5}
+```
+
+Each stage call uses Copilot AI credits, and a full run makes at least seven calls, so the Free allowance covers
+few runs.
 Copilot runs the same guard hooks as Claude Code (from a generated plugin), starts none of your MCP servers, and has
 `apply_patch`, `web_fetch` and `web_search` removed; model and GitHub tokens are hidden from its shell commands.
 Cost is not reported in dollars; token counts are.
