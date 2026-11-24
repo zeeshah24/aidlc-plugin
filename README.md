@@ -45,8 +45,29 @@ Add `--ref <tag>` (Codex) or `owner/repo#<tag>` (Copilot) to pin a release. For 
 and Copilot CLI accept `--plugin-dir /path/to/aidlc-plugin`. Assistants without plugin support can use the
 instruction files in `integrations/` (`copilot/copilot-instructions.md`, `codex/AGENTS.md`).
 
-Whichever assistant starts the run, `aidlc` routes stage work to the providers in `models.yaml` (Claude Code or
-Codex CLI), so their CLIs and API keys are still required.
+Whichever assistant starts the run, `aidlc` routes stage work to the providers in `models.yaml` (Claude Code,
+Codex CLI or GitHub Copilot CLI), so one of those CLIs must be installed and signed in.
+
+### Copilot only (no Anthropic/OpenAI key)
+
+Route every stage to Copilot CLI (`npm i -g @github/copilot`, then `copilot login`; or set `COPILOT_GITHUB_TOKEN`).
+Add to `aidlc.yaml`:
+
+```yaml
+models:
+  tiers:
+    fast:      {provider: copilot, model: auto}
+    reasoning: {provider: copilot, model: auto}
+    coding:    {provider: copilot, model: auto}
+  rules:
+    reviewer_must_differ_from_implementer: false   # Copilot Free only offers `auto`
+```
+
+On a paid Copilot plan, name models instead (see `/model` in Copilot CLI) and keep the reviewer rule, e.g.
+`coding: {provider: copilot, model: claude-sonnet-4.5}` and `review: {provider: copilot, model: gpt-5}`. Each stage
+call uses Copilot AI credits, and a full run makes at least seven calls, so the Free allowance covers few runs.
+Copilot runs the same guard hooks as Claude Code (from a generated plugin), gets no built-in MCP servers, and has
+`apply_patch`, `web_fetch` and `web_search` removed. Cost is not reported in dollars; token counts are.
 
 Each run works on its own branch in `.aidlc/worktrees/<run-id>/`. It writes artifacts to `.aidlc/runs/<run-id>/`
 and a cost/time report to `.aidlc/reports/<run-id>.md`.
@@ -76,7 +97,7 @@ scripts/aidlc-container.sh run requirements/x.md   # builds integrations/contain
 ```
 
 The container mounts only the repository, runs as your uid with no capabilities and a read-only root, and
-gets only model keys, `GH_TOKEN` and Jira credentials. Set `AIDLC_NETWORK` to a Docker network whose egress
+gets only model keys (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `COPILOT_GITHUB_TOKEN`), `GH_TOKEN` and Jira credentials. Set `AIDLC_NETWORK` to a Docker network whose egress
 only reaches your model API, git host and registry; the default `bridge` network is not restricted.
 Codex has no pre-tool hooks, so `aidlc` refuses to route `test` or `implement` to Codex outside the container
 (or another runtime you mark with `harness.isolated: true`) even when isolation is otherwise relaxed.

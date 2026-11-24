@@ -21,7 +21,7 @@ fi
 # Only model keys, a scoped git token, Jira credentials and the adopter's own telemetry collector settings are
 # forwarded; never cloud/deploy credentials.
 args=()
-for var in ANTHROPIC_API_KEY OPENAI_API_KEY GH_TOKEN JIRA_BASE_URL JIRA_EMAIL JIRA_API_TOKEN JIRA_PAT \
+for var in ANTHROPIC_API_KEY OPENAI_API_KEY COPILOT_GITHUB_TOKEN GH_TOKEN JIRA_BASE_URL JIRA_EMAIL JIRA_API_TOKEN JIRA_PAT \
            HTTPS_PROXY HTTP_PROXY NO_PROXY \
            OTEL_EXPORTER_OTLP_ENDPOINT OTEL_EXPORTER_OTLP_HEADERS AIDLC_TELEMETRY_SALT; do
   if [[ -n "${!var:-}" ]]; then args+=(-e "$var"); fi

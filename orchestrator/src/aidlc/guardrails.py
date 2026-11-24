@@ -167,7 +167,7 @@ def evaluate(tool_name: str, tool_input: dict, guardrails: dict, jail: Path, run
     if tool_name == "Bash":
         return check_command(tool_input.get("command", ""), guardrails, run_dir)
     if tool_name in WRITE_TOOLS:
-        path = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
+        path = tool_input.get("file_path") or tool_input.get("notebook_path") or tool_input.get("path") or ""
         return check_write(path, guardrails, jail, run_dir)
     if tool_name in READ_TOOLS:
         path = tool_input.get("file_path") or tool_input.get("notebook_path") or tool_input.get("path") or ""

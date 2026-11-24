@@ -3,7 +3,7 @@
 # Agent CLI versions are pinned below; also pin the base image digest in your org's build.
 FROM python:3.12-slim
 
-# Claude Code and Codex need Node 22+, newer than Debian ships.
+# Claude Code, Codex and Copilot CLI need Node 22+, newer than Debian ships.
 COPY --from=node:22-bookworm-slim /usr/local/bin/node /usr/local/bin/node
 COPY --from=node:22-bookworm-slim /usr/local/lib/node_modules /usr/local/lib/node_modules
 RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
@@ -12,11 +12,13 @@ RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
 # Tested versions; bump deliberately (agent CLI changes can change guard/hook behaviour).
 ARG CLAUDE_CODE_VERSION=2.1.330
 ARG CODEX_VERSION=0.171.0
+ARG COPILOT_VERSION=1.0.114
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends git ca-certificates gh \
  && rm -rf /var/lib/apt/lists/* \
  && npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" "@openai/codex@${CODEX_VERSION}" \
+      "@github/copilot@${COPILOT_VERSION}" \
  && npm cache clean --force
 
 COPY . /opt/aidlc-plugin
