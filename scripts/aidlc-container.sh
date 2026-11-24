@@ -8,8 +8,10 @@ set -euo pipefail
 
 PLUGIN_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # Tag the default image by the content it is built from, so upgrading the plugin rebuilds it.
-# The Dockerfile copies the whole plugin root, so hash every file in it (paths and contents).
-BUILD_HASH="$(cd "$PLUGIN_ROOT" && find . \( -name .git -o -name .aidlc -o -name __pycache__ \) -prune -o -type f -print \
+# Hash every file the build context sends (paths and contents); keep the prune list in step with
+# integrations/container/Dockerfile.dockerignore.
+BUILD_HASH="$(cd "$PLUGIN_ROOT" && find . \( -name .git -o -name .aidlc -o -name __pycache__ -o -name .venv -o -name .pytest_cache \
+  -o -name .ruff_cache \) -prune -o -type f -print \
   | LC_ALL=C sort | while IFS= read -r f; do printf '%s\n' "$f"; cat "$f"; done \
   | { sha256sum 2>/dev/null || shasum -a 256; } | cut -c1-12)"
 IMAGE="${AIDLC_IMAGE:-aidlc-agent:$BUILD_HASH}"
