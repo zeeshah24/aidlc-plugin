@@ -50,7 +50,11 @@ Codex CLI or GitHub Copilot CLI), so one of those CLIs must be installed and sig
 
 ### Copilot only (no Anthropic/OpenAI key)
 
-Route every stage to Copilot CLI (`npm i -g @github/copilot`, then `copilot login`; or set `COPILOT_GITHUB_TOKEN`).
+Route every stage to Copilot CLI (`npm i -g @github/copilot`, then `copilot login`). `copilot login` keeps its
+token in your OS keychain, which the container cannot read, so for `scripts/aidlc-container.sh` export
+`COPILOT_GITHUB_TOKEN` instead: a [fine-grained PAT](https://github.com/settings/personal-access-tokens/new) owned by
+your personal account with the **Copilot Requests** permission (classic `ghp_` tokens are not accepted). Without it,
+Copilot in the container falls back to the forwarded `GH_TOKEN`, which usually lacks Copilot access.
 Add to `aidlc.yaml`:
 
 ```yaml
