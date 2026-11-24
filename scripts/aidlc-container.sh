@@ -8,8 +8,10 @@ set -euo pipefail
 
 PLUGIN_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # Tag the default image by the content it is built from, so upgrading the plugin rebuilds it.
-BUILD_HASH="$(cd "$PLUGIN_ROOT" && find integrations/container orchestrator/pyproject.toml orchestrator/src -type f \
-  ! -name '*.pyc' -print0 | LC_ALL=C sort -z | xargs -0 cat | (sha256sum 2>/dev/null || shasum -a 256) | cut -c1-12)"
+# The Dockerfile copies the whole plugin root, so hash every file in it (paths and contents).
+BUILD_HASH="$(cd "$PLUGIN_ROOT" && find . \( -name .git -o -name .aidlc -o -name __pycache__ \) -prune -o -type f -print \
+  | LC_ALL=C sort | while IFS= read -r f; do printf '%s\n' "$f"; cat "$f"; done \
+  | { sha256sum 2>/dev/null || shasum -a 256; } | cut -c1-12)"
 IMAGE="${AIDLC_IMAGE:-aidlc-agent:$BUILD_HASH}"
 ROOT="$(git rev-parse --show-toplevel)"
 # A linked worktree keeps its git metadata in the main repository; mount that too.
