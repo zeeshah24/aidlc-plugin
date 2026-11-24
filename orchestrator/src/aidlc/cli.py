@@ -245,7 +245,7 @@ def cmd_stack(args: argparse.Namespace) -> int:
 def cmd_doctor(_args: argparse.Namespace) -> int:
     cfg = load_config(project_root())
     ok = True
-    for tool in ("git", "claude", "codex", "gh", "pip-audit", "bandit", "vulture", "npm", "madge"):
+    for tool in ("git", "claude", "codex", "copilot", "gh", "pip-audit", "bandit", "vulture", "npm", "madge"):
         print(f"{'ok ' if shutil.which(tool) else '-- '} {tool}")
     isolated = bool(cfg.get("harness.isolated")) or os.environ.get("AIDLC_ISOLATED") == "1"
     print(f"{'ok ' if isolated else '-- '} isolated agent runtime (container/VM)")

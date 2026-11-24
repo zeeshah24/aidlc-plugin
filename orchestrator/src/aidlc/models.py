@@ -75,7 +75,11 @@ def validate(cfg: Config) -> list[str]:
     if rules.get("reviewer_must_differ_from_implementer", True):
         impl, rev = resolve(cfg, "implement"), resolve(cfg, "review")
         if (impl.provider, impl.model) == (rev.provider, rev.model):
-            errors.append(f"review must use a different model than implement (both {impl.model})")
+            hint = " (Copilot Free only offers 'auto': set rules.reviewer_must_differ_from_implementer: false)"
+            errors.append(
+                f"review must use a different model than implement (both {impl.model})"
+                + (hint if impl.model == "auto" else "")
+            )
     return errors
 
 

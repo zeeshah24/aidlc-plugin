@@ -130,8 +130,9 @@ dependencies:
 env:
   # Never forwarded to test runs, which execute agent-written code.
   test_exclude: [ANTHROPIC_API_KEY, OPENAI_API_KEY, CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX, AWS_PROFILE,
-                 CODEX_HOME]
+                 CODEX_HOME, COPILOT_GITHUB_TOKEN, COPILOT_HOME]
   # Scoped tokens: only these variables reach agent and test subprocesses.
   passthrough: [PATH, HOME, USER, LANG, LC_ALL, TERM, TMPDIR, SHELL, VIRTUAL_ENV, PYTHONPATH, JAVA_HOME,
                 GOPATH, GOROOT, GOCACHE, NODE_PATH, ANTHROPIC_API_KEY, CLAUDE_CODE_USE_BEDROCK,
-                CLAUDE_CODE_USE_VERTEX, AWS_REGION, AWS_PROFILE, OPENAI_API_KEY, CODEX_HOME]
+                CLAUDE_CODE_USE_VERTEX, AWS_REGION, AWS_PROFILE, OPENAI_API_KEY, CODEX_HOME,
+                COPILOT_GITHUB_TOKEN, COPILOT_HOME]

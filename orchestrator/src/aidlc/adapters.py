@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import time
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -160,6 +161,98 @@ class CodexAdapter:
         )
 
 
+class CopilotAdapter:
+    """GitHub Copilot CLI (`copilot --output-format json`, prompt on stdin). Copilot runs Claude-format
+    PreToolUse hooks from a plugin directory (fail-closed on exit 2), so the guard is wired through a
+    generated plugin; token usage comes from the streamed `assistant.usage` events."""
+
+    name = "copilot"
+    # apply_patch edits carry no file path the guard can check.
+    EXCLUDED_TOOLS = ["apply_patch", "web_fetch", "web_search"]
+    # Removed from the environment of the agent's shell commands and MCP servers.
+    SECRET_ENV = ["COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN", "ANTHROPIC_API_KEY", "OPENAI_API_KEY"]
+
+    def __init__(self, binary: str = "copilot"):
+        self.binary = binary
+
+    def available(self) -> bool:
+        return shutil.which(self.binary) is not None
+
+    def mcp_servers(self, req: AgentRequest) -> list[str]:
+        """Every non-builtin MCP server Copilot would start (user, workspace and plugin config)."""
+        proc = run_killable([self.binary, "mcp", "list", "--json"], cwd=req.workdir, env=req.env, timeout=60)
+        if proc.returncode != 0:
+            raise RuntimeError(f"copilot mcp list failed: {(proc.stderr or proc.stdout)[-500:]}")
+        servers = json.loads(proc.stdout or "{}").get("mcpServers", {})
+        return sorted(name for name, cfg in servers.items() if cfg.get("source") != "builtin")
+
+    def command(self, req: AgentRequest, session_id: str, mcp_servers: list[str] = ()) -> list[str]:
+        cmd = [
+            self.binary,
+            "--output-format=json",
+            f"--model={req.model}",
+            f"--session-id={session_id}",
+            "--no-ask-user",
+            "--no-auto-update",
+            "--disable-builtin-mcps",
+            "--disallow-temp-dir",
+            "--excluded-tools=" + ",".join(self.EXCLUDED_TOOLS),
+        ]
+        cmd += [f"--secret-env-vars={var}" for var in self.SECRET_ENV]
+        cmd += [f"--disable-mcp-server={name}" for name in mcp_servers]
+        if req.writable:
+            cmd += ["--allow-tool=write", "--allow-tool=shell"]
+        else:
+            cmd += ["--deny-tool=write", "--deny-tool=shell"]
+        if req.settings_file:
+            settings = json.loads(req.settings_file.read_text())
+            cmd += [f"--plugin-dir={self._guard_plugin(req.settings_file, settings)}"]
+            for rule in settings.get("permissions", {}).get("deny", []):
+                kind, _, path = rule.partition("(")
+                cmd.append(f"--deny-tool={'read' if kind == 'Read' else 'write'}({path}")
+        return cmd
+
+    @staticmethod
+    def _guard_plugin(settings_file: Path, settings: dict) -> Path:
+        root = settings_file.with_name("copilot-guard")
+        (root / ".claude-plugin").mkdir(parents=True, exist_ok=True)
+        (root / "hooks.json").write_text(json.dumps({"hooks": settings.get("hooks", {})}, indent=2))
+        manifest = {"name": "aidlc-guard", "version": "0.0.0", "hooks": "./hooks.json"}
+        (root / ".claude-plugin" / "plugin.json").write_text(json.dumps(manifest, indent=2))
+        return root
+
+    def run(self, req: AgentRequest) -> AgentResult:
+        start = time.monotonic()
+        try:
+            servers = self.mcp_servers(req)
+        except (RuntimeError, ValueError) as e:
+            return AgentResult("", duration_s=time.monotonic() - start, ok=False, error=str(e))
+        proc = run_killable(
+            self.command(req, str(uuid.uuid4()), servers),
+            input=req.prompt,
+            cwd=req.workdir,
+            env=req.env,
+            timeout=req.timeout_s,
+        )
+        text, exit_code, tin, tout = "", proc.returncode, 0, 0
+        for line in proc.stdout.splitlines():
+            try:
+                ev = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            data = ev.get("data") or {}
+            if ev.get("type") == "assistant.message" and data.get("content"):
+                text = data["content"]
+            elif ev.get("type") == "assistant.usage":
+                tin += sum(data.get(k) or 0 for k in ("inputTokens", "cacheReadTokens", "cacheWriteTokens"))
+                tout += data.get("outputTokens") or 0
+            elif ev.get("type") == "result":
+                exit_code = ev.get("exitCode", exit_code)
+        ok = proc.returncode == 0 and exit_code == 0
+        error = "" if ok else (proc.stderr or proc.stdout)[-2000:]
+        return AgentResult(text, tin, tout, None, time.monotonic() - start, ok, error)
+
+
 class FakeAdapter:
     """Scripted adapter for tests and dry runs: handler(request) -> AgentResult | str."""
 
@@ -184,8 +277,9 @@ class FakeAdapter:
 CAPABILITIES = {
     "claude": {"pre-tool hooks": True, "reports cost": True, "os sandbox": False},
     "codex": {"pre-tool hooks": False, "reports cost": False, "os sandbox": True},
+    "copilot": {"pre-tool hooks": True, "reports cost": False, "os sandbox": False},
 }
 
 
 def default_adapters() -> dict[str, AgentAdapter]:
-    return {"claude": ClaudeCodeAdapter(), "codex": CodexAdapter()}
+    return {"claude": ClaudeCodeAdapter(), "codex": CodexAdapter(), "copilot": CopilotAdapter()}
